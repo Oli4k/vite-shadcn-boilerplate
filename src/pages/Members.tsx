@@ -1,23 +1,14 @@
-import { useEffect, useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { useAuth } from '@/contexts/auth-context'
+import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
-import { MoreHorizontal } from 'lucide-react'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { useAuth } from '@/contexts/auth-context'
+import { useToast } from '@/hooks/use-toast'
+import { ArrowUpDown } from 'lucide-react'
 
 interface Member {
   id: string
@@ -36,14 +27,24 @@ interface Member {
   updatedAt: string
 }
 
-export function Members() {
-  const { getAccessToken, user } = useAuth()
+export default function Members() {
+  const { user, getAccessToken } = useAuth()
+  const { toast } = useToast()
   const [members, setMembers] = useState<Member[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [searchTerm, setSearchTerm] = useState('')
+  const [membershipFilter, setMembershipFilter] = useState<string>('all')
+  const [statusFilter, setStatusFilter] = useState<string>('all')
+  const [sortField, setSortField] = useState<keyof Member>('name')
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc')
 
   useEffect(() => {
-    const fetchMembers = async () => {
+    fetchMembers()
+  }, [])
+
+  const fetchMembers = async () => {
+    try {
       const token = getAccessToken()
       if (!token) {
         setError('Not authenticated')
@@ -51,28 +52,27 @@ export function Members() {
         return
       }
 
-      try {
-        const response = await fetch('/api/members', {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        })
-
-        if (!response.ok) {
-          throw new Error('Failed to fetch members')
-        }
-
-        const data = await response.json()
-        setMembers(data)
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'An error occurred')
-      } finally {
-        setLoading(false)
+      const response = await fetch('/api/members', {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+      if (!response.ok) {
+        throw new Error('Failed to fetch members')
       }
+      const data = await response.json()
+      setMembers(data)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to fetch members')
+      toast({
+        title: 'Error',
+        description: 'Failed to load members. Please try again.',
+        variant: 'destructive',
+      })
+    } finally {
+      setLoading(false)
     }
-
-    fetchMembers()
-  }, [getAccessToken])
+  }
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -102,7 +102,36 @@ export function Members() {
     }
   }
 
-  const canManageMembers = user?.role === 'ADMIN' || user?.role === 'STAFF'
+  const filteredMembers = members.filter((member) => {
+    const matchesSearch = searchTerm === '' || 
+      member.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      member.email.toLowerCase().includes(searchTerm.toLowerCase())
+    
+    const matchesMembership = membershipFilter === 'all' || member.membershipType === membershipFilter
+    const matchesStatus = statusFilter === 'all' || member.status === statusFilter
+
+    return matchesSearch && matchesMembership && matchesStatus
+  })
+
+  const handleSort = (field: keyof Member) => {
+    if (sortField === field) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortField(field)
+      setSortDirection('asc')
+    }
+  }
+
+  const sortedAndFilteredMembers = [...filteredMembers].sort((a, b) => {
+    const aValue = a[sortField]
+    const bValue = b[sortField]
+    const direction = sortDirection === 'asc' ? 1 : -1
+
+    if (typeof aValue === 'string' && typeof bValue === 'string') {
+      return direction * aValue.localeCompare(bValue)
+    }
+    return 0
+  })
 
   if (loading) {
     return <div className="container mx-auto py-10">Loading...</div>
@@ -117,36 +146,88 @@ export function Members() {
   }
 
   return (
-    <div className="container mx-auto py-10">
-      <div className="flex justify-between items-center mb-8">
+    <div className="container mx-auto py-6">
+      <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold">Members</h1>
-        {canManageMembers && (
+        {user?.role === 'ADMIN' && (
           <Button asChild>
-            <Link to="/members/create">Add Member</Link>
+            <Link to="/members/create">Add New Member</Link>
           </Button>
         )}
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <div className="col-span-1 md:col-span-2">
+          <Input
+            placeholder="Search by name or email..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <Select value={membershipFilter} onValueChange={setMembershipFilter}>
+            <SelectTrigger>
+              <SelectValue placeholder="Membership Type" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Types</SelectItem>
+              <SelectItem value="REGULAR">Regular</SelectItem>
+              <SelectItem value="PREMIUM">Premium</SelectItem>
+              <SelectItem value="VIP">VIP</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger>
+              <SelectValue placeholder="Status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Statuses</SelectItem>
+              <SelectItem value="ACTIVE">Active</SelectItem>
+              <SelectItem value="INACTIVE">Inactive</SelectItem>
+              <SelectItem value="SUSPENDED">Suspended</SelectItem>
+              <SelectItem value="PENDING">Pending</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       <div className="rounded-md border">
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>Email</TableHead>
-              <TableHead>Phone</TableHead>
-              <TableHead>Membership Type</TableHead>
-              <TableHead>Status</TableHead>
+              <TableHead>
+                <Button variant="ghost" onClick={() => handleSort('name')} className="p-0">
+                  Name
+                  <ArrowUpDown className="ml-2 h-4 w-4" />
+                </Button>
+              </TableHead>
+              <TableHead>
+                <Button variant="ghost" onClick={() => handleSort('email')} className="p-0">
+                  Email
+                  <ArrowUpDown className="ml-2 h-4 w-4" />
+                </Button>
+              </TableHead>
+              <TableHead>
+                <Button variant="ghost" onClick={() => handleSort('membershipType')} className="p-0">
+                  Membership Type
+                  <ArrowUpDown className="ml-2 h-4 w-4" />
+                </Button>
+              </TableHead>
+              <TableHead>
+                <Button variant="ghost" onClick={() => handleSort('status')} className="p-0">
+                  Status
+                  <ArrowUpDown className="ml-2 h-4 w-4" />
+                </Button>
+              </TableHead>
               <TableHead>Managed By</TableHead>
-              <TableHead>Created At</TableHead>
               <TableHead>Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {members.map((member) => (
-              <TableRow key={member.id}>
+            {sortedAndFilteredMembers.map((member) => (
+              <TableRow key={member.id} className="group">
                 <TableCell>{member.name}</TableCell>
                 <TableCell>{member.email}</TableCell>
-                <TableCell>{member.phone || '-'}</TableCell>
                 <TableCell>
                   <Badge className={getMembershipTypeColor(member.membershipType)}>
                     {member.membershipType}
@@ -157,41 +238,23 @@ export function Members() {
                     {member.status}
                   </Badge>
                 </TableCell>
+                <TableCell>{member.managedBy?.name || '-'}</TableCell>
                 <TableCell>
-                  {member.managedBy?.name || '-'}
-                </TableCell>
-                <TableCell>
-                  {new Date(member.createdAt).toLocaleDateString()}
-                </TableCell>
-                <TableCell>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" className="h-8 w-8 p-0">
-                        <MoreHorizontal className="h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem asChild>
-                        <Link to={`/members/${member.id}`}>View Details</Link>
-                      </DropdownMenuItem>
-                      {canManageMembers && (
-                        <>
-                          <DropdownMenuItem asChild>
-                            <Link to={`/members/${member.id}/edit`}>Edit</Link>
-                          </DropdownMenuItem>
-                          <DropdownMenuItem asChild>
-                            <Link to={`/members/${member.id}/payments`}>View Payments</Link>
-                          </DropdownMenuItem>
-                        </>
-                      )}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+                  <Button asChild size="sm" variant="ghost" className="hover:bg-primary hover:text-primary-foreground">
+                    <Link to={`/members/${member.id}`}>View Details</Link>
+                  </Button>
                 </TableCell>
               </TableRow>
             ))}
           </TableBody>
         </Table>
       </div>
+
+      {sortedAndFilteredMembers.length === 0 && (
+        <div className="text-center py-10 text-gray-500">
+          No members found matching your criteria
+        </div>
+      )}
     </div>
   )
 } 
