@@ -20,7 +20,7 @@ interface Member {
   }
   createdAt: string
   updatedAt: string
-  payments: {
+  payments?: {
     id: string
     amount: number
     date: string
@@ -99,6 +99,25 @@ export function MemberDetails() {
   const canManageMember = user?.role === 'ADMIN' || 
     (user?.role === 'STAFF' && member?.managedBy?.id === user.id)
 
+  const handleSendInvite = async () => {
+    try {
+      const response = await fetch(`/api/members/${id}/send-invite`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${getAccessToken()}`,
+        },
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to send invitation')
+      }
+
+      toast.success('Invitation sent successfully')
+    } catch (error) {
+      toast.error('Failed to send invitation')
+    }
+  }
+
   if (loading) {
     return <div className="container mx-auto py-10">Loading...</div>
   }
@@ -126,9 +145,16 @@ export function MemberDetails() {
           <h1 className="text-3xl font-bold">Member Details</h1>
           <div className="space-x-4">
             {canManageMember && (
-              <Button asChild>
-                <Link to={`/members/${id}/edit`}>Edit Member</Link>
-              </Button>
+              <>
+                {member.status === 'PENDING' && (
+                  <Button onClick={handleSendInvite}>
+                    Send Invite
+                  </Button>
+                )}
+                <Button asChild>
+                  <Link to={`/members/${id}/edit`}>Edit Member</Link>
+                </Button>
+              </>
             )}
             <Button variant="outline" onClick={() => navigate('/members')}>
               Back to Members
@@ -200,7 +226,7 @@ export function MemberDetails() {
 
           <div>
             <h2 className="text-lg font-semibold mb-4">Payment History</h2>
-            {member.payments.length > 0 ? (
+            {member.payments?.length > 0 ? (
               <div className="overflow-x-auto">
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
@@ -217,7 +243,7 @@ export function MemberDetails() {
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {member.payments.map((payment) => (
+                    {member.payments?.map((payment) => (
                       <tr key={payment.id}>
                         <td className="px-6 py-4 whitespace-nowrap">
                           {new Date(payment.date).toLocaleDateString()}
@@ -226,15 +252,7 @@ export function MemberDetails() {
                           ${payment.amount.toFixed(2)}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <Badge
-                            className={
-                              payment.status === 'PAID'
-                                ? 'bg-green-500'
-                                : payment.status === 'PENDING'
-                                ? 'bg-yellow-500'
-                                : 'bg-red-500'
-                            }
-                          >
+                          <Badge className={getStatusColor(payment.status)}>
                             {payment.status}
                           </Badge>
                         </td>

@@ -1,10 +1,12 @@
-import Fastify, { FastifyRequest, FastifyReply } from 'fastify'
+import Fastify, { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify'
 import cors from '@fastify/cors'
 import { PrismaClient, Prisma } from '@prisma/client'
-import bcrypt from 'bcryptjs'
+import bcrypt from 'bcrypt'
 import jwt from 'jsonwebtoken'
 import cookie from '@fastify/cookie'
 import rateLimit from '@fastify/rate-limit'
+import { v4 as uuidv4 } from 'uuid'
+import { sendInvite } from './services/email'
 
 type UserRole = 'ADMIN' | 'STAFF' | 'MEMBER'
 type MemberStatus = 'ACTIVE' | 'INACTIVE' | 'SUSPENDED' | 'PENDING'
@@ -43,7 +45,7 @@ app.post('/api/auth/register', async (request: FastifyRequest<{
   Body: {
     email: string
     password: string
-    name?: string
+    name?: string | null
     role?: UserRole
   }
 }>, reply: FastifyReply) => {
@@ -473,6 +475,72 @@ app.delete('/api/members/:id', async (request, reply) => {
     reply.send({ message: 'Member deleted successfully' })
   } catch (error) {
     reply.status(500).send({ message: 'Error deleting member' })
+  }
+})
+
+// Add send-invite route
+app.post('/api/members/:id/send-invite', async (request: FastifyRequest<{
+  Params: {
+    id: string
+  }
+}>, reply: FastifyReply) => {
+  const token = request.headers.authorization?.split(' ')[1]
+
+  if (!token) {
+    reply.status(401).send({ message: 'No token provided' })
+    return
+  }
+
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET) as { userId: string }
+    const user = await prisma.user.findUnique({ where: { id: decoded.userId } })
+
+    if (!user) {
+      reply.status(401).send({ message: 'User not found' })
+      return
+    }
+
+    const { id } = request.params
+    console.log('Sending invite for member:', id)
+
+    const member = await prisma.member.findUnique({
+      where: { id },
+    })
+
+    if (!member) {
+      console.log('Member not found:', id)
+      reply.status(404).send({ message: 'Member not found' })
+      return
+    }
+
+    if (member.status !== 'PENDING') {
+      console.log('Member is not in pending status:', member.status)
+      reply.status(400).send({ message: 'Member is not in pending status' })
+      return
+    }
+
+    const invitationToken = uuidv4()
+    console.log('Generated invitation token:', invitationToken)
+
+    await prisma.member.update({
+      where: { id },
+      data: { 
+        invitationToken,
+        updatedAt: new Date()
+      },
+    })
+
+    console.log('Sending invitation email to:', member.email)
+    await sendInvite(member.email, member.name, invitationToken)
+    console.log('Invitation sent successfully')
+    
+    reply.send({ success: true })
+  } catch (error) {
+    console.error('Error sending invitation:', error)
+    reply.status(500).send({ 
+      message: 'Error sending invitation',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    })
   }
 })
 

@@ -1,8 +1,11 @@
-import { Outlet } from "react-router-dom";
 import { Sidebar } from "./Sidebar";
 import { UserMenu } from "../UserMenu";
 
-export function MainLayout() {
+interface MainLayoutProps {
+  children: React.ReactNode;
+}
+
+export function MainLayout({ children }: MainLayoutProps) {
   return (
     <div className="flex h-screen bg-background">
       <Sidebar />
@@ -11,7 +14,7 @@ export function MainLayout() {
           <UserMenu />
         </header>
         <main className="flex-1 overflow-auto p-4">
-          <Outlet />
+          {children}
         </main>
       </div>
     </div>
