@@ -1,209 +1,203 @@
-import fastify, { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify'
-import fastifyCors from '@fastify/cors'
-import fastifyRateLimit from '@fastify/rate-limit'
-import fastifyCookie from '@fastify/cookie'
-import fastifyJwt from '@fastify/jwt'
-import { z } from 'zod'
-import config from './config'
-import { findUserByEmail, findUserById, registerUser, User } from './services/user'
-import { comparePasswords } from './utils/password'
-import { generateTokens, verifyToken } from './utils/jwt'
+import Fastify from 'fastify'
+import cors from '@fastify/cors'
+import { PrismaClient } from '@prisma/client'
+import bcrypt from 'bcryptjs'
+import jwt from 'jsonwebtoken'
+import cookie from '@fastify/cookie'
+import rateLimit from '@fastify/rate-limit'
 
-// Extend Fastify types
-declare module 'fastify' {
-  interface FastifyRequest {
-    user?: {
-      userId: string
-    }
-  }
-}
-
-const server: FastifyInstance = fastify({
-  logger: true,
-})
+const prisma = new PrismaClient()
+const app = Fastify()
 
 // Register plugins
-await server.register(fastifyCors, {
-  origin: config.FRONTEND_URL,
+app.register(cors, {
+  origin: true,
   credentials: true,
 })
-
-await server.register(fastifyRateLimit, {
+app.register(cookie)
+app.register(rateLimit, {
   max: 100,
   timeWindow: '1 minute',
 })
 
-await server.register(fastifyCookie, {
-  secret: config.JWT_SECRET,
-})
+const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key'
+const REFRESH_TOKEN_SECRET = process.env.REFRESH_TOKEN_SECRET || 'your-refresh-secret-key'
 
-await server.register(fastifyJwt, {
-  secret: config.JWT_SECRET,
-  cookie: {
-    cookieName: 'refreshToken',
-    signed: true,
-  },
-})
+// Helper function to generate tokens
+function generateTokens(userId: string) {
+  const accessToken = jwt.sign({ userId }, JWT_SECRET, { expiresIn: '15m' })
+  const refreshToken = jwt.sign({ userId }, REFRESH_TOKEN_SECRET, { expiresIn: '7d' })
+  return { accessToken, refreshToken }
+}
 
-// Validation schemas
-const registerSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(8),
-  name: z.string().optional(),
-})
+// Auth routes
+app.post('/api/auth/register', async (request, reply) => {
+  const { email, password, name } = request.body as {
+    email: string
+    password: string
+    name?: string
+  }
 
-const loginSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(8),
-})
+  const hashedPassword = await bcrypt.hash(password, 10)
 
-// Authentication decorator
-server.decorate('authenticate', async function (request: FastifyRequest, reply: FastifyReply) {
   try {
-    await request.jwtVerify()
+    const user = await prisma.user.create({
+      data: {
+        email,
+        password: hashedPassword,
+        name,
+      },
+    })
+
+    const { accessToken, refreshToken } = generateTokens(user.id)
+
+    reply.setCookie('refreshToken', refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      path: '/',
+      maxAge: 7 * 24 * 60 * 60, // 7 days in seconds
+    })
+
+    reply.send({
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+      },
+      accessToken,
+    })
   } catch (error) {
-    reply.status(401).send({ error: 'Unauthorized' })
+    reply.status(400).send({ message: 'Email already exists' })
   }
 })
 
-// Routes
-server.post('/api/auth/register', {
-  config: {
-    rateLimit: {
-      max: 5,
-      timeWindow: '1 minute',
-    },
-  },
-  schema: {
-    body: {
-      type: 'object',
-      required: ['email', 'password'],
-      properties: {
-        email: { type: 'string', format: 'email' },
-        password: { type: 'string', minLength: 8 },
-        name: { type: 'string' },
-      },
-    },
-  },
-}, async (request, reply) => {
-  const { email, password, name } = request.body as z.infer<typeof registerSchema>
+app.post('/api/auth/login', async (request, reply) => {
+  const { email, password } = request.body as { email: string; password: string }
 
-  const user = await registerUser(email, password, name)
-  const { accessToken, refreshToken } = generateTokens(user.id)
+  const user = await prisma.user.findUnique({ where: { email } })
 
-  reply.setCookie('refreshToken', refreshToken, {
-    httpOnly: true,
-    secure: config.NODE_ENV === 'production',
-    sameSite: 'lax',
-    maxAge: 7 * 24 * 60 * 60, // 7 days
-  })
-
-  return reply.status(201).send({
-    user,
-    accessToken,
-  })
-})
-
-server.post('/api/auth/login', {
-  config: {
-    rateLimit: {
-      max: 5,
-      timeWindow: '1 minute',
-    },
-  },
-  schema: {
-    body: {
-      type: 'object',
-      required: ['email', 'password'],
-      properties: {
-        email: { type: 'string', format: 'email' },
-        password: { type: 'string', minLength: 8 },
-      },
-    },
-  },
-}, async (request, reply) => {
-  const { email, password } = request.body as z.infer<typeof loginSchema>
-
-  const user = await findUserByEmail(email)
   if (!user) {
-    return reply.status(401).send({ error: 'Invalid credentials' })
+    reply.status(401).send({ message: 'Invalid credentials' })
+    return
   }
 
-  const isValidPassword = await comparePasswords(password, user.password)
-  if (!isValidPassword) {
-    return reply.status(401).send({ error: 'Invalid credentials' })
+  const isValid = await bcrypt.compare(password, user.password)
+
+  if (!isValid) {
+    reply.status(401).send({ message: 'Invalid credentials' })
+    return
   }
 
   const { accessToken, refreshToken } = generateTokens(user.id)
 
   reply.setCookie('refreshToken', refreshToken, {
     httpOnly: true,
-    secure: config.NODE_ENV === 'production',
-    sameSite: 'lax',
-    maxAge: 7 * 24 * 60 * 60, // 7 days
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict',
+    path: '/',
+    maxAge: 7 * 24 * 60 * 60, // 7 days in seconds
   })
 
-  const { password: _, ...userWithoutPassword } = user
-  return reply.send({
-    user: userWithoutPassword,
+  reply.send({
+    user: {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      role: user.role,
+    },
     accessToken,
   })
 })
 
-server.post('/api/auth/refresh', async (request, reply) => {
+app.post('/api/auth/refresh', async (request, reply) => {
   const refreshToken = request.cookies.refreshToken
+
   if (!refreshToken) {
-    return reply.status(401).send({ error: 'No refresh token provided' })
+    reply.status(401).send({ message: 'No refresh token' })
+    return
   }
 
-  const decoded = verifyToken(refreshToken, 'refresh')
-  if (!decoded) {
-    return reply.status(401).send({ error: 'Invalid refresh token' })
+  try {
+    const decoded = jwt.verify(refreshToken, REFRESH_TOKEN_SECRET) as { userId: string }
+    const user = await prisma.user.findUnique({ where: { id: decoded.userId } })
+
+    if (!user) {
+      reply.status(401).send({ message: 'User not found' })
+      return
+    }
+
+    const { accessToken, refreshToken: newRefreshToken } = generateTokens(user.id)
+
+    reply.setCookie('refreshToken', newRefreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      path: '/',
+      maxAge: 7 * 24 * 60 * 60, // 7 days in seconds
+    })
+
+    reply.send({
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+      },
+      accessToken,
+    })
+  } catch (error) {
+    reply.status(401).send({ message: 'Invalid refresh token' })
   }
-
-  const user = await findUserById(decoded.userId)
-  if (!user) {
-    return reply.status(401).send({ error: 'User not found' })
-  }
-
-  const { accessToken, refreshToken: newRefreshToken } = generateTokens(user.id)
-
-  reply.setCookie('refreshToken', newRefreshToken, {
-    httpOnly: true,
-    secure: config.NODE_ENV === 'production',
-    sameSite: 'lax',
-    maxAge: 7 * 24 * 60 * 60, // 7 days
-  })
-
-  return reply.send({ accessToken })
 })
 
-server.post('/api/auth/logout', async (request, reply) => {
+app.post('/api/auth/logout', async (request, reply) => {
   reply.clearCookie('refreshToken', {
-    httpOnly: true,
-    secure: config.NODE_ENV === 'production',
-    sameSite: 'lax',
+    path: '/',
   })
-  return reply.send({ message: 'Logged out successfully' })
+  reply.send({ message: 'Logged out successfully' })
 })
 
-server.get('/api/auth/me', {
-  onRequest: [server.authenticate],
-}, async (request, reply) => {
-  const user = await findUserById(request.user!.userId)
-  if (!user) {
-    return reply.status(404).send({ error: 'User not found' })
+// Protected route example
+app.get('/api/auth/me', async (request, reply) => {
+  const token = request.headers.authorization?.split(' ')[1]
+
+  if (!token) {
+    reply.status(401).send({ message: 'No token provided' })
+    return
   }
-  return reply.send({ user })
+
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET) as { userId: string }
+    const user = await prisma.user.findUnique({
+      where: { id: decoded.userId },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+      },
+    })
+
+    if (!user) {
+      reply.status(401).send({ message: 'User not found' })
+      return
+    }
+
+    reply.send(user)
+  } catch (error) {
+    reply.status(401).send({ message: 'Invalid token' })
+  }
 })
 
 // Start server
 const start = async () => {
   try {
-    await server.listen({ port: config.PORT, host: '0.0.0.0' })
-    console.log(`Server is running on port ${config.PORT}`)
+    await app.listen({ port: 3001 })
+    console.log('Server is running on http://localhost:3001')
   } catch (err) {
-    server.log.error(err)
+    console.error(err)
     process.exit(1)
   }
 }

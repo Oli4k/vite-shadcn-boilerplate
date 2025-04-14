@@ -1,25 +1,19 @@
-import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
-import { MainLayout } from "@/components/layout/MainLayout";
-import { Dashboard } from "@/pages/Dashboard";
-import { Courts } from "@/pages/Courts";
-import { Members } from "@/pages/Members";
-import { Bookings } from "@/pages/Bookings";
-import { Packages } from "@/pages/Packages";
-import { Login } from "@/pages/Login";
-import { AuthProvider, useAuth } from "@/contexts/AuthContext";
+import { Routes, Route, Navigate } from 'react-router-dom'
+import { ProtectedRoute } from './components/protected-route'
+import { MainLayout } from './components/layout/MainLayout'
+import { Login } from './pages/Login'
+import { Register } from './pages/Register'
+import { Dashboard } from './pages/Dashboard'
+import { Courts } from './pages/Courts'
+import { Members } from './pages/Members'
+import { Bookings } from './pages/Bookings'
+import { Packages } from './pages/Packages'
 
-function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated } = useAuth();
-  if (!isAuthenticated) {
-    return <Navigate to="/login" replace />;
-  }
-  return <>{children}</>;
-}
-
-function AppRoutes() {
+export function App() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/register" element={<Register />} />
       <Route
         path="/"
         element={
@@ -28,22 +22,13 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       >
-        <Route index element={<Dashboard />} />
+        <Route index element={<Navigate to="/dashboard" replace />} />
+        <Route path="dashboard" element={<Dashboard />} />
         <Route path="courts" element={<Courts />} />
         <Route path="members" element={<Members />} />
         <Route path="bookings" element={<Bookings />} />
         <Route path="packages" element={<Packages />} />
       </Route>
     </Routes>
-  );
-}
-
-export function App() {
-  return (
-    <Router>
-      <AuthProvider>
-        <AppRoutes />
-      </AuthProvider>
-    </Router>
-  );
+  )
 }
