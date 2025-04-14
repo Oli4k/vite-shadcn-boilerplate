@@ -1,4 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { useAuth } from '@/contexts/auth-context'
+import { Button } from '@/components/ui/button'
 import {
   Table,
   TableBody,
@@ -6,118 +9,104 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Plus, Mail, Phone, Search } from "lucide-react";
+} from '@/components/ui/table'
+import { Badge } from '@/components/ui/badge'
 
-const members = [
-  {
-    id: 1,
-    name: "John Doe",
-    email: "john@example.com",
-    phone: "+1 234 567 890",
-    membershipType: "Premium",
-    joinDate: "2024-01-15",
-    status: "Active",
-  },
-  {
-    id: 2,
-    name: "Jane Smith",
-    email: "jane@example.com",
-    phone: "+1 234 567 891",
-    membershipType: "Standard",
-    joinDate: "2024-02-20",
-    status: "Active",
-  },
-  {
-    id: 3,
-    name: "Mike Johnson",
-    email: "mike@example.com",
-    phone: "+1 234 567 892",
-    membershipType: "Premium",
-    joinDate: "2024-03-01",
-    status: "Inactive",
-  },
-];
+interface Member {
+  id: string
+  name: string
+  email: string
+  phone?: string
+  membershipType: 'REGULAR' | 'PREMIUM' | 'VIP'
+  status: 'ACTIVE' | 'INACTIVE' | 'SUSPENDED'
+  notes?: string
+  createdAt: string
+  updatedAt: string
+}
 
 export function Members() {
-  const [searchQuery, setSearchQuery] = useState("");
-  const [membershipFilter, setMembershipFilter] = useState("all");
-  const [statusFilter, setStatusFilter] = useState("all");
+  const { getAccessToken } = useAuth()
+  const [members, setMembers] = useState<Member[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
 
-  const filteredMembers = members.filter((member) => {
-    const matchesSearch =
-      member.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      member.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      member.phone.includes(searchQuery);
+  useEffect(() => {
+    const fetchMembers = async () => {
+      const token = getAccessToken()
+      if (!token) {
+        setError('Not authenticated')
+        setLoading(false)
+        return
+      }
 
-    const matchesMembership =
-      membershipFilter === "all" || member.membershipType === membershipFilter;
+      try {
+        const response = await fetch('/api/members', {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        })
 
-    const matchesStatus =
-      statusFilter === "all" || member.status === statusFilter;
+        if (!response.ok) {
+          throw new Error('Failed to fetch members')
+        }
 
-    return matchesSearch && matchesMembership && matchesStatus;
-  });
+        const data = await response.json()
+        setMembers(data)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'An error occurred')
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchMembers()
+  }, [getAccessToken])
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'ACTIVE':
+        return 'bg-green-500'
+      case 'INACTIVE':
+        return 'bg-gray-500'
+      case 'SUSPENDED':
+        return 'bg-red-500'
+      default:
+        return 'bg-gray-500'
+    }
+  }
+
+  const getMembershipTypeColor = (type: string) => {
+    switch (type) {
+      case 'REGULAR':
+        return 'bg-blue-500'
+      case 'PREMIUM':
+        return 'bg-purple-500'
+      case 'VIP':
+        return 'bg-yellow-500'
+      default:
+        return 'bg-gray-500'
+    }
+  }
+
+  if (loading) {
+    return <div className="container mx-auto py-10">Loading...</div>
+  }
+
+  if (error) {
+    return (
+      <div className="container mx-auto py-10">
+        <div className="text-red-500">{error}</div>
+      </div>
+    )
+  }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-3xl font-bold tracking-tight">Members</h2>
-          <p className="text-muted-foreground">
-            Manage your club members and their details
-          </p>
-        </div>
-        <Button>
-          <Plus className="mr-2 h-4 w-4" />
-          Add Member
+    <div className="container mx-auto py-10">
+      <div className="flex justify-between items-center mb-8">
+        <h1 className="text-3xl font-bold">Members</h1>
+        <Button asChild>
+          <Link to="/members/create">Add Member</Link>
         </Button>
-      </div>
-
-      <div className="flex flex-col gap-4 md:flex-row">
-        <div className="relative flex-1">
-          <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search members..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-8"
-          />
-        </div>
-        <div className="flex gap-2">
-          <Select
-            value={membershipFilter}
-            onValueChange={setMembershipFilter}
-          >
-            <SelectTrigger className="w-[180px]">
-              <SelectValue placeholder="Membership Type" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Types</SelectItem>
-              <SelectItem value="Premium">Premium</SelectItem>
-              <SelectItem value="Standard">Standard</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-[180px]">
-              <SelectValue placeholder="Status" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Status</SelectItem>
-              <SelectItem value="Active">Active</SelectItem>
-              <SelectItem value="Inactive">Inactive</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
       </div>
 
       <div className="rounded-md border">
@@ -125,45 +114,38 @@ export function Members() {
           <TableHeader>
             <TableRow>
               <TableHead>Name</TableHead>
-              <TableHead>Contact</TableHead>
+              <TableHead>Email</TableHead>
+              <TableHead>Phone</TableHead>
               <TableHead>Membership Type</TableHead>
-              <TableHead>Join Date</TableHead>
               <TableHead>Status</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
+              <TableHead>Created At</TableHead>
+              <TableHead>Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredMembers.map((member) => (
+            {members.map((member) => (
               <TableRow key={member.id}>
-                <TableCell className="font-medium">{member.name}</TableCell>
+                <TableCell>{member.name}</TableCell>
+                <TableCell>{member.email}</TableCell>
+                <TableCell>{member.phone || '-'}</TableCell>
                 <TableCell>
-                  <div className="flex flex-col gap-1">
-                    <div className="flex items-center gap-2">
-                      <Mail className="h-4 w-4 text-muted-foreground" />
-                      <span>{member.email}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Phone className="h-4 w-4 text-muted-foreground" />
-                      <span>{member.phone}</span>
-                    </div>
-                  </div>
-                </TableCell>
-                <TableCell>{member.membershipType}</TableCell>
-                <TableCell>{member.joinDate}</TableCell>
-                <TableCell>
-                  <span
-                    className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${
-                      member.status === "Active"
-                        ? "bg-green-100 text-green-700"
-                        : "bg-red-100 text-red-700"
-                    }`}
+                  <Badge
+                    className={getMembershipTypeColor(member.membershipType)}
                   >
-                    {member.status}
-                  </span>
+                    {member.membershipType}
+                  </Badge>
                 </TableCell>
-                <TableCell className="text-right">
-                  <Button variant="ghost" size="sm">
-                    Edit
+                <TableCell>
+                  <Badge className={getStatusColor(member.status)}>
+                    {member.status}
+                  </Badge>
+                </TableCell>
+                <TableCell>
+                  {new Date(member.createdAt).toLocaleDateString()}
+                </TableCell>
+                <TableCell>
+                  <Button variant="link" asChild>
+                    <Link to={`/members/${member.id}`}>View</Link>
                   </Button>
                 </TableCell>
               </TableRow>
@@ -172,5 +154,5 @@ export function Members() {
         </Table>
       </div>
     </div>
-  );
+  )
 } 

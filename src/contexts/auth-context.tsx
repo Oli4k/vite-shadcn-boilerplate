@@ -16,6 +16,7 @@ interface AuthContextType {
   register: (email: string, password: string, name?: string) => Promise<void>
   logout: () => Promise<void>
   refreshToken: () => Promise<void>
+  getAccessToken: () => string | null
 }
 
 const AuthContext = createContext<AuthContextType | null>(null)
@@ -26,22 +27,40 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate()
 
   useEffect(() => {
-    // Check if user is logged in on mount
     checkAuth()
   }, [])
 
+  const getAccessToken = () => {
+    return localStorage.getItem('accessToken')
+  }
+
   const checkAuth = async () => {
+    const token = getAccessToken()
+    if (!token) {
+      setIsLoading(false)
+      return
+    }
+
     try {
       const response = await fetch('/api/auth/me', {
-        credentials: 'include',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
       })
       
       if (response.ok) {
         const userData = await response.json()
         setUser(userData)
+      } else if (response.status === 401) {
+        // Token expired, try to refresh
+        await refreshToken()
+      } else {
+        throw new Error('Failed to fetch user data')
       }
     } catch (error) {
       console.error('Auth check failed:', error)
+      localStorage.removeItem('accessToken')
+      setUser(null)
     } finally {
       setIsLoading(false)
     }
@@ -51,7 +70,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const response = await fetch('/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
       body: JSON.stringify({ email, password }),
     })
 
@@ -61,6 +79,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     const data = await response.json()
+    localStorage.setItem('accessToken', data.accessToken)
     setUser(data.user)
     navigate('/dashboard')
   }
@@ -69,7 +88,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const response = await fetch('/api/auth/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
       body: JSON.stringify({ email, password, name }),
     })
 
@@ -79,24 +97,39 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     const data = await response.json()
+    localStorage.setItem('accessToken', data.accessToken)
     setUser(data.user)
     navigate('/dashboard')
   }
 
   const logout = async () => {
-    await fetch('/api/auth/logout', {
-      method: 'POST',
-      credentials: 'include',
-    })
+    const token = getAccessToken()
+    if (token) {
+      await fetch('/api/auth/logout', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+    }
+    localStorage.removeItem('accessToken')
     setUser(null)
     navigate('/login')
   }
 
   const refreshToken = async () => {
+    const token = getAccessToken()
+    if (!token) {
+      setUser(null)
+      return
+    }
+
     try {
       const response = await fetch('/api/auth/refresh', {
         method: 'POST',
-        credentials: 'include',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
       })
 
       if (!response.ok) {
@@ -104,9 +137,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       const data = await response.json()
+      localStorage.setItem('accessToken', data.accessToken)
       setUser(data.user)
     } catch (error) {
       console.error('Token refresh failed:', error)
+      localStorage.removeItem('accessToken')
       setUser(null)
       navigate('/login')
     }
@@ -122,6 +157,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         register,
         logout,
         refreshToken,
+        getAccessToken,
       }}
     >
       {children}

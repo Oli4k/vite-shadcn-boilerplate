@@ -191,6 +191,187 @@ app.get('/api/auth/me', async (request, reply) => {
   }
 })
 
+// Member routes
+app.post('/api/members', async (request, reply) => {
+  const token = request.headers.authorization?.split(' ')[1]
+
+  if (!token) {
+    reply.status(401).send({ message: 'No token provided' })
+    return
+  }
+
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET) as { userId: string }
+    const user = await prisma.user.findUnique({ where: { id: decoded.userId } })
+
+    if (!user) {
+      reply.status(401).send({ message: 'User not found' })
+      return
+    }
+
+    const { name, email, phone, membershipType, notes } = request.body as {
+      name: string
+      email: string
+      phone?: string
+      membershipType?: 'REGULAR' | 'PREMIUM' | 'VIP'
+      notes?: string
+    }
+
+    const member = await prisma.member.create({
+      data: {
+        name,
+        email,
+        phone,
+        membershipType: membershipType || 'REGULAR',
+        notes,
+      },
+    })
+
+    reply.send(member)
+  } catch (error) {
+    if (error.code === 'P2002') {
+      reply.status(400).send({ message: 'Email already exists' })
+    } else {
+      reply.status(500).send({ message: 'Error creating member' })
+    }
+  }
+})
+
+app.get('/api/members', async (request, reply) => {
+  const token = request.headers.authorization?.split(' ')[1]
+
+  if (!token) {
+    reply.status(401).send({ message: 'No token provided' })
+    return
+  }
+
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET) as { userId: string }
+    const user = await prisma.user.findUnique({ where: { id: decoded.userId } })
+
+    if (!user) {
+      reply.status(401).send({ message: 'User not found' })
+      return
+    }
+
+    const members = await prisma.member.findMany({
+      orderBy: {
+        createdAt: 'desc',
+      },
+    })
+
+    reply.send(members)
+  } catch (error) {
+    reply.status(500).send({ message: 'Error fetching members' })
+  }
+})
+
+app.get('/api/members/:id', async (request, reply) => {
+  const token = request.headers.authorization?.split(' ')[1]
+
+  if (!token) {
+    reply.status(401).send({ message: 'No token provided' })
+    return
+  }
+
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET) as { userId: string }
+    const user = await prisma.user.findUnique({ where: { id: decoded.userId } })
+
+    if (!user) {
+      reply.status(401).send({ message: 'User not found' })
+      return
+    }
+
+    const { id } = request.params as { id: string }
+    const member = await prisma.member.findUnique({ where: { id } })
+
+    if (!member) {
+      reply.status(404).send({ message: 'Member not found' })
+      return
+    }
+
+    reply.send(member)
+  } catch (error) {
+    reply.status(500).send({ message: 'Error fetching member' })
+  }
+})
+
+app.put('/api/members/:id', async (request, reply) => {
+  const token = request.headers.authorization?.split(' ')[1]
+
+  if (!token) {
+    reply.status(401).send({ message: 'No token provided' })
+    return
+  }
+
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET) as { userId: string }
+    const user = await prisma.user.findUnique({ where: { id: decoded.userId } })
+
+    if (!user) {
+      reply.status(401).send({ message: 'User not found' })
+      return
+    }
+
+    const { id } = request.params as { id: string }
+    const { name, email, phone, membershipType, status, notes } = request.body as {
+      name?: string
+      email?: string
+      phone?: string
+      membershipType?: 'REGULAR' | 'PREMIUM' | 'VIP'
+      status?: 'ACTIVE' | 'INACTIVE' | 'SUSPENDED'
+      notes?: string
+    }
+
+    const member = await prisma.member.update({
+      where: { id },
+      data: {
+        name,
+        email,
+        phone,
+        membershipType,
+        status,
+        notes,
+      },
+    })
+
+    reply.send(member)
+  } catch (error) {
+    if (error.code === 'P2002') {
+      reply.status(400).send({ message: 'Email already exists' })
+    } else {
+      reply.status(500).send({ message: 'Error updating member' })
+    }
+  }
+})
+
+app.delete('/api/members/:id', async (request, reply) => {
+  const token = request.headers.authorization?.split(' ')[1]
+
+  if (!token) {
+    reply.status(401).send({ message: 'No token provided' })
+    return
+  }
+
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET) as { userId: string }
+    const user = await prisma.user.findUnique({ where: { id: decoded.userId } })
+
+    if (!user) {
+      reply.status(401).send({ message: 'User not found' })
+      return
+    }
+
+    const { id } = request.params as { id: string }
+    await prisma.member.delete({ where: { id } })
+
+    reply.send({ message: 'Member deleted successfully' })
+  } catch (error) {
+    reply.status(500).send({ message: 'Error deleting member' })
+  }
+})
+
 // Start server
 const start = async () => {
   try {
