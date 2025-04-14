@@ -1,10 +1,14 @@
 import Fastify, { FastifyRequest, FastifyReply } from 'fastify'
 import cors from '@fastify/cors'
-import { PrismaClient, Prisma, UserRole, MemberStatus, MembershipType } from '@prisma/client'
+import { PrismaClient, Prisma } from '@prisma/client'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import cookie from '@fastify/cookie'
 import rateLimit from '@fastify/rate-limit'
+
+type UserRole = 'ADMIN' | 'STAFF' | 'MEMBER'
+type MemberStatus = 'ACTIVE' | 'INACTIVE' | 'SUSPENDED' | 'PENDING'
+type MembershipType = 'REGULAR' | 'PREMIUM' | 'VIP'
 
 const prisma = new PrismaClient()
 const app = Fastify()
@@ -35,12 +39,15 @@ function generateTokens(userId: string) {
 }
 
 // Auth routes
-app.post('/api/auth/register', async (request, reply) => {
-  const { email, password, name } = request.body as {
+app.post('/api/auth/register', async (request: FastifyRequest<{
+  Body: {
     email: string
     password: string
     name?: string
+    role?: UserRole
   }
+}>, reply: FastifyReply) => {
+  const { email, password, name, role } = request.body
 
   try {
     // Check if user already exists
@@ -61,7 +68,7 @@ app.post('/api/auth/register', async (request, reply) => {
         email,
         password: hashedPassword,
         name: name || null,
-        role: 'MEMBER', // Using string literal instead of enum
+        role: role || 'MEMBER',
       },
     })
 
@@ -211,6 +218,44 @@ app.get('/api/auth/me', async (request, reply) => {
 })
 
 // Member routes
+app.get('/api/members', async (request: FastifyRequest, reply: FastifyReply) => {
+  const token = request.headers.authorization?.split(' ')[1]
+
+  if (!token) {
+    reply.status(401).send({ message: 'No token provided' })
+    return
+  }
+
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET) as { userId: string }
+    const user = await prisma.user.findUnique({ where: { id: decoded.userId } })
+
+    if (!user) {
+      reply.status(401).send({ message: 'User not found' })
+      return
+    }
+
+    const members = await prisma.member.findMany({
+      include: {
+        managedBy: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+    })
+
+    reply.send(members)
+  } catch (error) {
+    console.error('Error fetching members:', error)
+    reply.status(500).send({ message: 'Failed to fetch members' })
+  }
+})
+
 app.post('/api/members', async (request: FastifyRequest<{
   Body: {
     name: string
@@ -219,7 +264,7 @@ app.post('/api/members', async (request: FastifyRequest<{
     address?: string | null
     membershipType?: MembershipType
     status?: MemberStatus
-    managedById?: string | null
+    notes?: string | null
   }
 }>, reply: FastifyReply) => {
   const token = request.headers.authorization?.split(' ')[1]
@@ -238,7 +283,7 @@ app.post('/api/members', async (request: FastifyRequest<{
       return
     }
 
-    const { name, email, phone, address, membershipType, status, managedById } = request.body
+    const { name, email, phone, address, membershipType, status, notes } = request.body
 
     if (!name || !email) {
       reply.status(400).send({ message: 'Name and email are required' })
@@ -249,69 +294,31 @@ app.post('/api/members', async (request: FastifyRequest<{
       data: {
         name,
         email,
-        phone: phone || null,
-        address: address || null,
+        phone,
+        address,
         membershipType: membershipType || 'REGULAR',
         status: status || 'PENDING',
-        managedById: managedById || null,
-      } as Prisma.MemberCreateInput,
+        notes,
+        managedById: user.id,
+      },
       include: {
-        managedBy: true,
-        payments: true,
+        managedBy: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
       },
     })
 
-    reply.send(member)
-  } catch (error: any) {
+    reply.status(201).send(member)
+  } catch (error) {
+    console.error('Error creating member:', error)
     if (error.code === 'P2002') {
       reply.status(400).send({ message: 'Email already exists' })
     } else {
-      console.error('Error creating member:', error)
-      reply.status(500).send({ message: 'Error creating member' })
+      reply.status(500).send({ message: 'Failed to create member' })
     }
-  }
-})
-
-app.get('/api/members', async (request: FastifyRequest, reply: FastifyReply) => {
-  const token = request.headers.authorization?.split(' ')[1]
-
-  if (!token) {
-    reply.status(401).send({ message: 'No token provided' })
-    return
-  }
-
-  try {
-    const decoded = jwt.verify(token, JWT_SECRET) as { userId: string }
-    const user = await prisma.user.findUnique({ where: { id: decoded.userId } })
-
-    if (!user) {
-      reply.status(401).send({ message: 'User not found' })
-      return
-    }
-
-    // If user is staff, only show their managed members
-    const where = user.role === 'STAFF' ? { managedById: user.id } : {}
-
-    const members = await prisma.member.findMany({
-      where,
-      include: {
-        managedBy: true,
-        payments: {
-          orderBy: {
-            date: 'desc',
-          },
-          take: 1,
-        },
-      },
-      orderBy: {
-        createdAt: 'desc',
-      },
-    })
-
-    reply.send(members)
-  } catch (error: any) {
-    console.error('Error fetching members:', error)
-    reply.status(500).send({ message: 'Error fetching members' })
   }
 })
 
@@ -338,27 +345,13 @@ app.get('/api/members/:id', async (request: FastifyRequest<{
 
     const { id } = request.params
 
-    // If user is staff, check if they manage this member
-    if (user.role === 'STAFF') {
-      const member = await prisma.member.findFirst({
-        where: {
-          id,
-          managedById: user.id,
-        },
-      })
-      if (!member) {
-        reply.status(403).send({ message: 'Access denied' })
-        return
-      }
-    }
-
     const member = await prisma.member.findUnique({
       where: { id },
       include: {
-        managedBy: true,
-        payments: {
-          orderBy: {
-            date: 'desc',
+        managedBy: {
+          select: {
+            id: true,
+            name: true,
           },
         },
       },
@@ -370,7 +363,7 @@ app.get('/api/members/:id', async (request: FastifyRequest<{
     }
 
     reply.send(member)
-  } catch (error: any) {
+  } catch (error) {
     console.error('Error fetching member:', error)
     reply.status(500).send({ message: 'Error fetching member' })
   }
@@ -436,7 +429,12 @@ app.put('/api/members/:id', async (request: FastifyRequest<{
         managedById: managedById || null,
       } as Prisma.MemberUpdateInput,
       include: {
-        managedBy: true,
+        managedBy: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
         payments: true,
       },
     })

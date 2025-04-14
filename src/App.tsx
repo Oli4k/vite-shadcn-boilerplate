@@ -6,6 +6,7 @@ import { Register } from './pages/Register'
 import { Dashboard } from './pages/Dashboard'
 import { Courts } from './pages/Courts'
 import { Members } from './pages/Members'
+import { MemberDetail } from './pages/MemberDetail'
 import { Bookings } from './pages/Bookings'
 import { Packages } from './pages/Packages'
 
@@ -26,6 +27,7 @@ export function App() {
         <Route path="dashboard" element={<Dashboard />} />
         <Route path="courts" element={<Courts />} />
         <Route path="members" element={<Members />} />
+        <Route path="members/:id" element={<MemberDetail />} />
         <Route path="bookings" element={<Bookings />} />
         <Route path="packages" element={<Packages />} />
       </Route>
