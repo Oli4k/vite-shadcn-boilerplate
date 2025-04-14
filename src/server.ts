@@ -101,10 +101,22 @@ app.post('/api/auth/register', async (request: FastifyRequest<{
   }
 })
 
-app.post('/api/auth/login', async (request, reply) => {
-  const { email, password } = request.body as { email: string; password: string }
+app.post('/api/auth/login', async (request: FastifyRequest<{
+  Body: {
+    email: string
+    password: string
+  }
+}>, reply: FastifyReply) => {
+  const { email, password } = request.body
 
-  const user = await prisma.user.findUnique({ where: { email } })
+  if (!email || !password) {
+    reply.status(400).send({ message: 'Email and password are required' })
+    return
+  }
+
+  const user = await prisma.user.findUnique({ 
+    where: { email } 
+  })
 
   if (!user) {
     reply.status(401).send({ message: 'Invalid credentials' })
@@ -480,67 +492,115 @@ app.delete('/api/members/:id', async (request, reply) => {
 
 // Add send-invite route
 app.post('/api/members/:id/send-invite', async (request: FastifyRequest<{
-  Params: {
-    id: string
-  }
+  Params: { id: string }
 }>, reply: FastifyReply) => {
-  const token = request.headers.authorization?.split(' ')[1]
-
-  if (!token) {
-    reply.status(401).send({ message: 'No token provided' })
-    return
-  }
+  const { id } = request.params
 
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as { userId: string }
-    const user = await prisma.user.findUnique({ where: { id: decoded.userId } })
-
-    if (!user) {
-      reply.status(401).send({ message: 'User not found' })
-      return
-    }
-
-    const { id } = request.params
-    console.log('Sending invite for member:', id)
-
+    // Find the member
     const member = await prisma.member.findUnique({
       where: { id },
     })
 
     if (!member) {
-      console.log('Member not found:', id)
       reply.status(404).send({ message: 'Member not found' })
       return
     }
 
     if (member.status !== 'PENDING') {
-      console.log('Member is not in pending status:', member.status)
-      reply.status(400).send({ message: 'Member is not in pending status' })
+      reply.status(400).send({ message: 'Can only send invites to pending members' })
       return
     }
 
+    // Generate a new invitation token
     const invitationToken = uuidv4()
-    console.log('Generated invitation token:', invitationToken)
 
-    await prisma.member.update({
+    // Update the member with the new token
+    const updatedMember = await prisma.member.update({
       where: { id },
-      data: { 
+      data: {
         invitationToken,
-        updatedAt: new Date()
       },
     })
 
-    console.log('Sending invitation email to:', member.email)
-    await sendInvite(member.email, member.name, invitationToken)
-    console.log('Invitation sent successfully')
-    
-    reply.send({ success: true })
+    // Send the invitation email
+    await sendInvite(member.email, member.name || 'Member', invitationToken)
+
+    reply.send({ message: 'Invitation sent successfully' })
   } catch (error) {
     console.error('Error sending invitation:', error)
-    reply.status(500).send({ 
-      message: 'Error sending invitation',
-      error: error instanceof Error ? error.message : 'Unknown error'
+    reply.status(500).send({ message: 'Error sending invitation' })
+  }
+})
+
+app.post('/api/members/accept-invitation', async (request: FastifyRequest<{
+  Body: {
+    token: string
+    password: string
+  }
+}>, reply: FastifyReply) => {
+  const { token, password } = request.body
+
+  try {
+    // Find the member with this invitation token
+    const member = await prisma.member.findFirst({
+      where: {
+        invitationToken: token,
+        status: 'PENDING',
+      },
     })
+
+    if (!member) {
+      reply.status(400).send({ message: 'Invalid or expired invitation token' })
+      return
+    }
+
+    // Hash the password
+    const hashedPassword = await bcrypt.hash(password, 10)
+
+    // Create a user account for the member
+    const user = await prisma.user.create({
+      data: {
+        email: member.email,
+        password: hashedPassword,
+        name: member.name,
+        role: 'MEMBER',
+      },
+    })
+
+    // Update the member to link it to the user and clear the invitation token
+    const updatedMember = await prisma.member.update({
+      where: { id: member.id },
+      data: {
+        invitationToken: null,
+        status: 'ACTIVE',
+        userId: user.id,
+      },
+    })
+
+    // Generate tokens for immediate login
+    const { accessToken, refreshToken } = generateTokens(user.id)
+
+    reply.setCookie('refreshToken', refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      path: '/',
+      maxAge: 7 * 24 * 60 * 60, // 7 days in seconds
+    })
+
+    reply.send({
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+      },
+      accessToken,
+    })
+  } catch (error) {
+    console.error('Error accepting invitation:', error)
+    reply.status(500).send({ message: 'Error accepting invitation' })
   }
 })
 

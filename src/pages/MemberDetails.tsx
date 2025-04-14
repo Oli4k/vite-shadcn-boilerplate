@@ -4,6 +4,7 @@ import { useAuth } from '@/contexts/auth-context'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { toast } from 'sonner'
+import { useToast } from '@/hooks/use-toast'
 
 interface Member {
   id: string
@@ -26,18 +27,20 @@ interface Member {
     date: string
     status: string
   }[]
+  invitationToken?: string
 }
 
-export function MemberDetails() {
-  const { id } = useParams<{ id: string }>()
+export default function MemberDetails() {
+  const { toast } = useToast()
+  const { id } = useParams()
   const { getAccessToken, user } = useAuth()
   const navigate = useNavigate()
   const [member, setMember] = useState<Member | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
-  useEffect(() => {
-    const fetchMember = async () => {
+  const fetchMember = async () => {
+    try {
       const token = getAccessToken()
       if (!token) {
         setError('Not authenticated')
@@ -45,28 +48,26 @@ export function MemberDetails() {
         return
       }
 
-      try {
-        const response = await fetch(`/api/members/${id}`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        })
-
-        if (!response.ok) {
-          throw new Error('Failed to fetch member details')
-        }
-
-        const data = await response.json()
-        setMember(data)
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'An error occurred')
-      } finally {
-        setLoading(false)
+      const response = await fetch(`/api/members/${id}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+      if (!response.ok) {
+        throw new Error('Failed to fetch member')
       }
+      const data = await response.json()
+      setMember(data)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to fetch member')
+    } finally {
+      setLoading(false)
     }
+  }
 
+  useEffect(() => {
     fetchMember()
-  }, [id, getAccessToken])
+  }, [id])
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -103,18 +104,77 @@ export function MemberDetails() {
     try {
       const response = await fetch(`/api/members/${id}/send-invite`, {
         method: 'POST',
-        headers: {
-          Authorization: `Bearer ${getAccessToken()}`,
-        },
       })
 
       if (!response.ok) {
-        throw new Error('Failed to send invitation')
+        throw new Error('Failed to send invite')
       }
 
-      toast.success('Invitation sent successfully')
+      toast({
+        title: 'Invite sent',
+        description: 'An invitation email has been sent to the member.',
+      })
+      fetchMember() // Refresh member data
     } catch (error) {
-      toast.error('Failed to send invitation')
+      toast({
+        title: 'Error',
+        description: 'Failed to send invite. Please try again.',
+        variant: 'destructive',
+      })
+    }
+  }
+
+  const handleDelete = async () => {
+    if (!window.confirm('Are you sure you want to delete this member?')) return
+
+    try {
+      const response = await fetch(`/api/members/${id}`, {
+        method: 'DELETE',
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to delete member')
+      }
+
+      toast({
+        title: 'Member deleted',
+        description: 'The member has been successfully deleted.',
+      })
+      navigate('/members')
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to delete member. Please try again.',
+        variant: 'destructive',
+      })
+    }
+  }
+
+  const handleStatusChange = async (newStatus: string) => {
+    try {
+      const response = await fetch(`/api/members/${id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ status: newStatus }),
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to update status')
+      }
+
+      toast({
+        title: 'Status updated',
+        description: `Member status has been updated to ${newStatus.toLowerCase()}.`,
+      })
+      fetchMember() // Refresh member data
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to update status. Please try again.',
+        variant: 'destructive',
+      })
     }
   }
 
@@ -144,11 +204,11 @@ export function MemberDetails() {
         <div className="flex justify-between items-center mb-8">
           <h1 className="text-3xl font-bold">Member Details</h1>
           <div className="space-x-4">
-            {canManageMember && (
+            {user?.role === 'ADMIN' && (
               <>
                 {member.status === 'PENDING' && (
                   <Button onClick={handleSendInvite}>
-                    Send Invite
+                    {member.invitationToken ? 'Resend Invite' : 'Send Invite'}
                   </Button>
                 )}
                 <Button asChild>
@@ -199,10 +259,15 @@ export function MemberDetails() {
                 </div>
                 <div>
                   <dt className="text-sm text-gray-500">Status</dt>
-                  <dd>
+                  <dd className="flex items-center gap-2">
                     <Badge className={getStatusColor(member.status)}>
                       {member.status}
                     </Badge>
+                    {member.status === 'PENDING' && member.invitationToken && (
+                      <Badge variant="outline" className="text-yellow-600 border-yellow-600">
+                        Invite Sent
+                      </Badge>
+                    )}
                   </dd>
                 </div>
                 <div>
@@ -224,47 +289,26 @@ export function MemberDetails() {
             </div>
           )}
 
-          <div>
-            <h2 className="text-lg font-semibold mb-4">Payment History</h2>
-            {member.payments?.length > 0 ? (
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Date
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Amount
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Status
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {member.payments?.map((payment) => (
-                      <tr key={payment.id}>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          {new Date(payment.date).toLocaleDateString()}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          ${payment.amount.toFixed(2)}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <Badge className={getStatusColor(payment.status)}>
-                            {payment.status}
-                          </Badge>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+          {member.payments && member.payments.length > 0 && (
+            <div>
+              <h2 className="text-lg font-semibold mb-4">Recent Payments</h2>
+              <div className="space-y-4">
+                {member.payments.map((payment) => (
+                  <div key={payment.id} className="border rounded-lg p-4">
+                    <div className="flex justify-between items-center">
+                      <div>
+                        <p className="font-medium">${payment.amount}</p>
+                        <p className="text-sm text-gray-500">{new Date(payment.date).toLocaleDateString()}</p>
+                      </div>
+                      <Badge variant={payment.status === 'COMPLETED' ? 'default' : 'secondary'}>
+                        {payment.status}
+                      </Badge>
+                    </div>
+                  </div>
+                ))}
               </div>
-            ) : (
-              <p className="text-gray-500">No payment history available</p>
-            )}
-          </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
