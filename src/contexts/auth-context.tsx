@@ -5,7 +5,7 @@ interface User {
   id: string
   email: string
   name: string | null
-  role: 'USER' | 'ADMIN'
+  role: 'ADMIN' | 'STAFF' | 'MEMBER'
 }
 
 interface AuthContextType {
@@ -46,6 +46,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         headers: {
           Authorization: `Bearer ${token}`,
         },
+        credentials: 'include',
       })
       
       if (response.ok) {
@@ -70,6 +71,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const response = await fetch('/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
       body: JSON.stringify({ email, password }),
     })
 
@@ -88,6 +90,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const response = await fetch('/api/auth/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
       body: JSON.stringify({ email, password, name }),
     })
 
@@ -110,6 +113,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         headers: {
           Authorization: `Bearer ${token}`,
         },
+        credentials: 'include',
       })
     }
     localStorage.removeItem('accessToken')
@@ -130,6 +134,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         headers: {
           Authorization: `Bearer ${token}`,
         },
+        credentials: 'include',
       })
 
       if (!response.ok) {

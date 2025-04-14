@@ -11,21 +11,33 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { MoreHorizontal } from 'lucide-react'
 
 interface Member {
   id: string
   name: string
   email: string
   phone?: string
+  address?: string
   membershipType: 'REGULAR' | 'PREMIUM' | 'VIP'
-  status: 'ACTIVE' | 'INACTIVE' | 'SUSPENDED'
+  status: 'ACTIVE' | 'INACTIVE' | 'SUSPENDED' | 'PENDING'
   notes?: string
+  managedBy?: {
+    id: string
+    name: string
+  }
   createdAt: string
   updatedAt: string
 }
 
 export function Members() {
-  const { getAccessToken } = useAuth()
+  const { getAccessToken, user } = useAuth()
   const [members, setMembers] = useState<Member[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -70,6 +82,8 @@ export function Members() {
         return 'bg-gray-500'
       case 'SUSPENDED':
         return 'bg-red-500'
+      case 'PENDING':
+        return 'bg-yellow-500'
       default:
         return 'bg-gray-500'
     }
@@ -88,6 +102,8 @@ export function Members() {
     }
   }
 
+  const canManageMembers = user?.role === 'ADMIN' || user?.role === 'STAFF'
+
   if (loading) {
     return <div className="container mx-auto py-10">Loading...</div>
   }
@@ -104,9 +120,11 @@ export function Members() {
     <div className="container mx-auto py-10">
       <div className="flex justify-between items-center mb-8">
         <h1 className="text-3xl font-bold">Members</h1>
-        <Button asChild>
-          <Link to="/members/create">Add Member</Link>
-        </Button>
+        {canManageMembers && (
+          <Button asChild>
+            <Link to="/members/create">Add Member</Link>
+          </Button>
+        )}
       </div>
 
       <div className="rounded-md border">
@@ -118,6 +136,7 @@ export function Members() {
               <TableHead>Phone</TableHead>
               <TableHead>Membership Type</TableHead>
               <TableHead>Status</TableHead>
+              <TableHead>Managed By</TableHead>
               <TableHead>Created At</TableHead>
               <TableHead>Actions</TableHead>
             </TableRow>
@@ -129,9 +148,7 @@ export function Members() {
                 <TableCell>{member.email}</TableCell>
                 <TableCell>{member.phone || '-'}</TableCell>
                 <TableCell>
-                  <Badge
-                    className={getMembershipTypeColor(member.membershipType)}
-                  >
+                  <Badge className={getMembershipTypeColor(member.membershipType)}>
                     {member.membershipType}
                   </Badge>
                 </TableCell>
@@ -141,12 +158,34 @@ export function Members() {
                   </Badge>
                 </TableCell>
                 <TableCell>
+                  {member.managedBy?.name || '-'}
+                </TableCell>
+                <TableCell>
                   {new Date(member.createdAt).toLocaleDateString()}
                 </TableCell>
                 <TableCell>
-                  <Button variant="link" asChild>
-                    <Link to={`/members/${member.id}`}>View</Link>
-                  </Button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" className="h-8 w-8 p-0">
+                        <MoreHorizontal className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem asChild>
+                        <Link to={`/members/${member.id}`}>View Details</Link>
+                      </DropdownMenuItem>
+                      {canManageMembers && (
+                        <>
+                          <DropdownMenuItem asChild>
+                            <Link to={`/members/${member.id}/edit`}>Edit</Link>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem asChild>
+                            <Link to={`/members/${member.id}/payments`}>View Payments</Link>
+                          </DropdownMenuItem>
+                        </>
+                      )}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </TableCell>
               </TableRow>
             ))}

@@ -14,14 +14,16 @@ datasource db {
 }
 
 enum UserRole {
-  USER
   ADMIN
+  STAFF
+  MEMBER
 }
 
-enum UserStatus {
+enum MemberStatus {
   ACTIVE
   INACTIVE
   SUSPENDED
+  PENDING
 }
 
 enum MembershipType {
@@ -31,23 +33,42 @@ enum MembershipType {
 }
 
 model User {
-  id        String   @id @default(uuid())
-  email     String   @unique
-  password  String
-  name      String?
-  role      UserRole @default(USER)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id            String        @id @default(uuid())
+  email         String        @unique
+  password      String
+  name          String?
+  role          UserRole      @default(MEMBER)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  managedMembers Member[]     @relation("MemberManager")
+  memberProfile Member?       @relation("UserMember")
 }
 
 model Member {
-  id             String         @id @default(uuid())
-  name           String
-  email          String         @unique
-  phone          String?
-  membershipType MembershipType @default(REGULAR)
-  status         UserStatus     @default(ACTIVE)
-  notes          String?
-  createdAt      DateTime       @default(now())
-  updatedAt      DateTime       @updatedAt
+  id              String        @id @default(uuid())
+  name            String
+  email           String        @unique
+  phone           String?
+  address         String?
+  membershipType  MembershipType @default(REGULAR)
+  status          MemberStatus   @default(PENDING)
+  notes           String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  managedBy       User?         @relation("MemberManager", fields: [managedById], references: [id])
+  managedById     String?
+  user            User?         @relation("UserMember", fields: [userId], references: [id])
+  userId          String?       @unique
+  payments        Payment[]
+}
+
+model Payment {
+  id          String    @id @default(uuid())
+  amount      Float
+  date        DateTime  @default(now())
+  status      String    // PAID, PENDING, FAILED
+  member      Member    @relation(fields: [memberId], references: [id])
+  memberId    String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 }

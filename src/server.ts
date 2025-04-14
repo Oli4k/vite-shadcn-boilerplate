@@ -1,6 +1,6 @@
-import Fastify from 'fastify'
+import Fastify, { FastifyRequest, FastifyReply } from 'fastify'
 import cors from '@fastify/cors'
-import { PrismaClient } from '@prisma/client'
+import { PrismaClient, Prisma, UserRole, MemberStatus, MembershipType } from '@prisma/client'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import cookie from '@fastify/cookie'
@@ -11,8 +11,12 @@ const app = Fastify()
 
 // Register plugins
 app.register(cors, {
-  origin: true,
+  origin: process.env.NODE_ENV === 'production' 
+    ? 'http://localhost:5173' 
+    : ['http://localhost:5173', 'http://127.0.0.1:5173'],
   credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
 })
 app.register(cookie)
 app.register(rateLimit, {
@@ -38,16 +42,30 @@ app.post('/api/auth/register', async (request, reply) => {
     name?: string
   }
 
-  const hashedPassword = await bcrypt.hash(password, 10)
-
   try {
+    // Check if user already exists
+    const existingUser = await prisma.user.findUnique({
+      where: { email },
+    })
+
+    if (existingUser) {
+      console.log('Registration failed: Email already exists', { email })
+      reply.status(400).send({ message: 'Email already exists' })
+      return
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10)
+
     const user = await prisma.user.create({
       data: {
         email,
         password: hashedPassword,
-        name,
+        name: name || null,
+        role: 'MEMBER', // Using string literal instead of enum
       },
     })
+
+    console.log('User created successfully:', { userId: user.id, email: user.email })
 
     const { accessToken, refreshToken } = generateTokens(user.id)
 
@@ -69,7 +87,8 @@ app.post('/api/auth/register', async (request, reply) => {
       accessToken,
     })
   } catch (error) {
-    reply.status(400).send({ message: 'Email already exists' })
+    console.error('Registration error:', error)
+    reply.status(500).send({ message: 'Error during registration' })
   }
 })
 
@@ -192,7 +211,17 @@ app.get('/api/auth/me', async (request, reply) => {
 })
 
 // Member routes
-app.post('/api/members', async (request, reply) => {
+app.post('/api/members', async (request: FastifyRequest<{
+  Body: {
+    name: string
+    email: string
+    phone?: string | null
+    address?: string | null
+    membershipType?: MembershipType
+    status?: MemberStatus
+    managedById?: string | null
+  }
+}>, reply: FastifyReply) => {
   const token = request.headers.authorization?.split(' ')[1]
 
   if (!token) {
@@ -209,35 +238,41 @@ app.post('/api/members', async (request, reply) => {
       return
     }
 
-    const { name, email, phone, membershipType, notes } = request.body as {
-      name: string
-      email: string
-      phone?: string
-      membershipType?: 'REGULAR' | 'PREMIUM' | 'VIP'
-      notes?: string
+    const { name, email, phone, address, membershipType, status, managedById } = request.body
+
+    if (!name || !email) {
+      reply.status(400).send({ message: 'Name and email are required' })
+      return
     }
 
     const member = await prisma.member.create({
       data: {
         name,
         email,
-        phone,
+        phone: phone || null,
+        address: address || null,
         membershipType: membershipType || 'REGULAR',
-        notes,
+        status: status || 'PENDING',
+        managedById: managedById || null,
+      } as Prisma.MemberCreateInput,
+      include: {
+        managedBy: true,
+        payments: true,
       },
     })
 
     reply.send(member)
-  } catch (error) {
+  } catch (error: any) {
     if (error.code === 'P2002') {
       reply.status(400).send({ message: 'Email already exists' })
     } else {
+      console.error('Error creating member:', error)
       reply.status(500).send({ message: 'Error creating member' })
     }
   }
 })
 
-app.get('/api/members', async (request, reply) => {
+app.get('/api/members', async (request: FastifyRequest, reply: FastifyReply) => {
   const token = request.headers.authorization?.split(' ')[1]
 
   if (!token) {
@@ -254,19 +289,37 @@ app.get('/api/members', async (request, reply) => {
       return
     }
 
+    // If user is staff, only show their managed members
+    const where = user.role === 'STAFF' ? { managedById: user.id } : {}
+
     const members = await prisma.member.findMany({
+      where,
+      include: {
+        managedBy: true,
+        payments: {
+          orderBy: {
+            date: 'desc',
+          },
+          take: 1,
+        },
+      },
       orderBy: {
         createdAt: 'desc',
       },
     })
 
     reply.send(members)
-  } catch (error) {
+  } catch (error: any) {
+    console.error('Error fetching members:', error)
     reply.status(500).send({ message: 'Error fetching members' })
   }
 })
 
-app.get('/api/members/:id', async (request, reply) => {
+app.get('/api/members/:id', async (request: FastifyRequest<{
+  Params: {
+    id: string
+  }
+}>, reply: FastifyReply) => {
   const token = request.headers.authorization?.split(' ')[1]
 
   if (!token) {
@@ -283,8 +336,33 @@ app.get('/api/members/:id', async (request, reply) => {
       return
     }
 
-    const { id } = request.params as { id: string }
-    const member = await prisma.member.findUnique({ where: { id } })
+    const { id } = request.params
+
+    // If user is staff, check if they manage this member
+    if (user.role === 'STAFF') {
+      const member = await prisma.member.findFirst({
+        where: {
+          id,
+          managedById: user.id,
+        },
+      })
+      if (!member) {
+        reply.status(403).send({ message: 'Access denied' })
+        return
+      }
+    }
+
+    const member = await prisma.member.findUnique({
+      where: { id },
+      include: {
+        managedBy: true,
+        payments: {
+          orderBy: {
+            date: 'desc',
+          },
+        },
+      },
+    })
 
     if (!member) {
       reply.status(404).send({ message: 'Member not found' })
@@ -292,12 +370,26 @@ app.get('/api/members/:id', async (request, reply) => {
     }
 
     reply.send(member)
-  } catch (error) {
+  } catch (error: any) {
+    console.error('Error fetching member:', error)
     reply.status(500).send({ message: 'Error fetching member' })
   }
 })
 
-app.put('/api/members/:id', async (request, reply) => {
+app.put('/api/members/:id', async (request: FastifyRequest<{
+  Params: {
+    id: string
+  },
+  Body: {
+    name?: string
+    email?: string
+    phone?: string | null
+    address?: string | null
+    membershipType?: MembershipType
+    status?: MemberStatus
+    managedById?: string | null
+  }
+}>, reply: FastifyReply) => {
   const token = request.headers.authorization?.split(' ')[1]
 
   if (!token) {
@@ -314,33 +406,47 @@ app.put('/api/members/:id', async (request, reply) => {
       return
     }
 
-    const { id } = request.params as { id: string }
-    const { name, email, phone, membershipType, status, notes } = request.body as {
-      name?: string
-      email?: string
-      phone?: string
-      membershipType?: 'REGULAR' | 'PREMIUM' | 'VIP'
-      status?: 'ACTIVE' | 'INACTIVE' | 'SUSPENDED'
-      notes?: string
+    const { id } = request.params
+
+    // If user is staff, check if they manage this member
+    if (user.role === 'STAFF') {
+      const member = await prisma.member.findFirst({
+        where: {
+          id,
+          managedById: user.id,
+        },
+      })
+      if (!member) {
+        reply.status(403).send({ message: 'Access denied' })
+        return
+      }
     }
+
+    const { name, email, phone, address, membershipType, status, managedById } = request.body
 
     const member = await prisma.member.update({
       where: { id },
       data: {
         name,
         email,
-        phone,
+        phone: phone || null,
+        address: address || null,
         membershipType,
         status,
-        notes,
+        managedById: managedById || null,
+      } as Prisma.MemberUpdateInput,
+      include: {
+        managedBy: true,
+        payments: true,
       },
     })
 
     reply.send(member)
-  } catch (error) {
+  } catch (error: any) {
     if (error.code === 'P2002') {
       reply.status(400).send({ message: 'Email already exists' })
     } else {
+      console.error('Error updating member:', error)
       reply.status(500).send({ message: 'Error updating member' })
     }
   }
