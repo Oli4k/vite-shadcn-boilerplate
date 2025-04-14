@@ -1,6 +1,6 @@
-import * as express from 'express'
+import express from 'express'
 import type { RequestHandler } from 'express'
-import * as cors from 'cors'
+import cors from 'cors'
 import { prisma } from './lib/db.ts'
 import { hashPassword, comparePasswords, generateToken, verifyToken } from './lib/auth.ts'
 
