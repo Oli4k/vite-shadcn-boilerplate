@@ -1,0 +1,160 @@
+import { useState, useEffect } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
+import { Label } from '@/components/ui/label'
+import { toast } from '@/hooks/use-toast'
+
+export function ResetPassword() {
+  const [searchParams] = useSearchParams()
+  const [token, setToken] = useState('')
+  const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [isLoading, setIsLoading] = useState(false)
+  const [isValidToken, setIsValidToken] = useState(false)
+  const navigate = useNavigate()
+
+  useEffect(() => {
+    const tokenParam = searchParams.get('token')
+    if (tokenParam) {
+      setToken(tokenParam)
+      verifyToken(tokenParam)
+    }
+  }, [searchParams])
+
+  const verifyToken = async (token: string) => {
+    try {
+      const response = await fetch('/api/auth/verify-reset-token', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ token }),
+      })
+
+      if (response.ok) {
+        setIsValidToken(true)
+      } else {
+        toast({
+          title: 'Error',
+          description: 'Invalid or expired reset token',
+          variant: 'destructive',
+        })
+        navigate('/login')
+      }
+    } catch (error) {
+      console.error('Token verification error:', error)
+      toast({
+        title: 'Error',
+        description: 'Failed to verify reset token',
+        variant: 'destructive',
+      })
+      navigate('/login')
+    }
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setIsLoading(true)
+
+    if (password !== confirmPassword) {
+      toast({
+        title: 'Error',
+        description: 'Passwords do not match',
+        variant: 'destructive',
+      })
+      setIsLoading(false)
+      return
+    }
+
+    try {
+      const response = await fetch('/api/auth/reset-password', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ token, password }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to reset password')
+      }
+
+      toast({
+        title: 'Success',
+        description: 'Your password has been reset successfully',
+      })
+
+      navigate('/login')
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'Failed to reset password',
+        variant: 'destructive',
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  if (!isValidToken) {
+    return null
+  }
+
+  return (
+    <div className="min-h-screen flex items-center justify-center p-4">
+      <Card className="w-[350px]">
+        <CardHeader>
+          <CardTitle>Reset Password</CardTitle>
+          <CardDescription>Enter your new password</CardDescription>
+        </CardHeader>
+        <form onSubmit={handleSubmit}>
+          <CardContent>
+            <div className="grid w-full items-center gap-4">
+              <div className="flex flex-col space-y-1.5">
+                <Label htmlFor="password">New Password</Label>
+                <Input
+                  id="password"
+                  type="password"
+                  placeholder="Enter your new password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  minLength={8}
+                />
+              </div>
+              <div className="flex flex-col space-y-1.5">
+                <Label htmlFor="confirmPassword">Confirm Password</Label>
+                <Input
+                  id="confirmPassword"
+                  type="password"
+                  placeholder="Confirm your new password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  required
+                  minLength={8}
+                />
+              </div>
+            </div>
+          </CardContent>
+          <CardFooter className="flex flex-col gap-4">
+            <Button type="submit" disabled={isLoading} className="w-full">
+              {isLoading ? 'Resetting...' : 'Reset Password'}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => navigate('/login')}
+              className="w-full"
+            >
+              Back to Login
+            </Button>
+          </CardFooter>
+        </form>
+      </Card>
+    </div>
+  )
+} 

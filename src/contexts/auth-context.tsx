@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from 'react'
+import { createContext, useContext, useEffect, useState, ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 interface User {
@@ -15,75 +15,62 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<void>
   register: (email: string, password: string, name?: string) => Promise<void>
   logout: () => Promise<void>
-  refreshToken: () => Promise<void>
-  getAccessToken: () => string | null
+  checkAuth: () => Promise<void>
 }
 
-const AuthContext = createContext<AuthContextType | null>(null)
+const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
-export function AuthProvider({ children }: { children: React.ReactNode }) {
+export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const navigate = useNavigate()
 
-  useEffect(() => {
-    checkAuth()
-  }, [])
-
-  const getAccessToken = () => {
-    return localStorage.getItem('accessToken')
-  }
-
   const checkAuth = async () => {
-    const token = getAccessToken()
-    if (!token) {
-      setIsLoading(false)
-      return
-    }
-
     try {
       const response = await fetch('/api/auth/me', {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
         credentials: 'include',
       })
-      
       if (response.ok) {
-        const userData = await response.json()
-        setUser(userData)
-      } else if (response.status === 401) {
-        // Token expired, try to refresh
-        await refreshToken()
+        const data = await response.json()
+        setUser(data.user)
       } else {
-        throw new Error('Failed to fetch user data')
+        setUser(null)
       }
     } catch (error) {
       console.error('Auth check failed:', error)
-      localStorage.removeItem('accessToken')
       setUser(null)
     } finally {
       setIsLoading(false)
     }
   }
 
+  useEffect(() => {
+    checkAuth()
+  }, [])
+
   const login = async (email: string, password: string) => {
-    const response = await fetch('/api/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({ email, password }),
-    })
+    try {
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({ email, password }),
+      })
 
-    if (!response.ok) {
-      const error = await response.json()
-      throw new Error(error.message || 'Login failed')
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Login failed')
+      }
+
+      await checkAuth()
+      navigate('/')
+    } catch (error) {
+      console.error('Login error:', error)
+      throw error
     }
-
-    const data = await response.json()
-    localStorage.setItem('accessToken', data.accessToken)
-    setUser(data.user)
-    navigate('/dashboard')
   }
 
   const register = async (email: string, password: string, name?: string) => {
@@ -96,59 +83,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     if (!response.ok) {
       const error = await response.json()
-      throw new Error(error.message || 'Registration failed')
+      throw new Error(error.error || 'Registration failed')
     }
 
-    const data = await response.json()
-    localStorage.setItem('accessToken', data.accessToken)
-    setUser(data.user)
+    const { user: userData } = await response.json()
+    setUser(userData)
     navigate('/dashboard')
   }
 
   const logout = async () => {
-    const token = getAccessToken()
-    if (token) {
+    try {
       await fetch('/api/auth/logout', {
         method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
         credentials: 'include',
       })
-    }
-    localStorage.removeItem('accessToken')
-    setUser(null)
-    navigate('/login')
-  }
-
-  const refreshToken = async () => {
-    const token = getAccessToken()
-    if (!token) {
-      setUser(null)
-      return
-    }
-
-    try {
-      const response = await fetch('/api/auth/refresh', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-        credentials: 'include',
-      })
-
-      if (!response.ok) {
-        throw new Error('Token refresh failed')
-      }
-
-      const data = await response.json()
-      localStorage.setItem('accessToken', data.accessToken)
-      setUser(data.user)
-    } catch (error) {
-      console.error('Token refresh failed:', error)
-      localStorage.removeItem('accessToken')
       setUser(null)
       navigate('/login')
+    } catch (error) {
+      console.error('Logout error:', error)
     }
   }
 
@@ -161,8 +113,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         login,
         register,
         logout,
-        refreshToken,
-        getAccessToken,
+        checkAuth,
       }}
     >
       {children}
@@ -172,7 +123,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
 export function useAuth() {
   const context = useContext(AuthContext)
-  if (!context) {
+  if (context === undefined) {
     throw new Error('useAuth must be used within an AuthProvider')
   }
   return context

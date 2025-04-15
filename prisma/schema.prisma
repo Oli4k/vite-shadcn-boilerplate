@@ -32,6 +32,24 @@ enum MembershipType {
   VIP
 }
 
+enum CourtSurface {
+  HARD
+  CLAY
+  GRASS
+  ARTIFICIAL_GRASS
+}
+
+enum CourtType {
+  INDOOR
+  OUTDOOR
+}
+
+enum CourtStatus {
+  ACTIVE
+  MAINTENANCE
+  CLOSED
+}
+
 model User {
   id            String        @id @default(uuid())
   email         String        @unique
@@ -42,6 +60,7 @@ model User {
   updatedAt     DateTime      @updatedAt
   managedMembers Member[]     @relation("MemberManager")
   memberProfile Member?       @relation("UserMember")
+  resetTokens   PasswordResetToken[]
 }
 
 model Member {
@@ -61,6 +80,7 @@ model Member {
   userId          String?       @unique
   payments        Payment[]
   invitationToken String?       @unique
+  bookings        Booking[]
 }
 
 model Payment {
@@ -84,4 +104,42 @@ model EmailVerification {
   updatedAt DateTime @updatedAt
 
   @@index([email])
+}
+
+model Court {
+  id          String      @id @default(cuid())
+  name        String
+  surface     CourtSurface
+  type        CourtType
+  status      CourtStatus @default(ACTIVE)
+  hasLights   Boolean     @default(false)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  bookings    Booking[]
+}
+
+model Booking {
+  id          String    @id @default(cuid())
+  courtId     String
+  court       Court     @relation(fields: [courtId], references: [id])
+  memberId    String
+  member      Member    @relation(fields: [memberId], references: [id])
+  startTime   DateTime
+  endTime     DateTime
+  status      String    @default("confirmed") // "confirmed", "cancelled", "completed"
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model PasswordResetToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([token])
+  @@index([userId])
 }

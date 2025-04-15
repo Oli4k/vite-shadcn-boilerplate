@@ -1,181 +1,139 @@
-import { useState } from "react";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Plus, Calendar, Wrench } from "lucide-react";
-
-const courts = [
-  {
-    id: 1,
-    name: "Court 1",
-    type: "Tennis",
-    status: "Available",
-    lastMaintenance: "2024-03-15",
-    nextMaintenance: "2024-05-15",
-    surface: "Hard",
-    lights: true,
-  },
-  {
-    id: 2,
-    name: "Court 2",
-    type: "Padel",
-    status: "Booked",
-    lastMaintenance: "2024-03-20",
-    nextMaintenance: "2024-05-20",
-    surface: "Artificial Grass",
-    lights: true,
-  },
-  {
-    id: 3,
-    name: "Court 3",
-    type: "Tennis",
-    status: "Maintenance",
-    lastMaintenance: "2024-04-01",
-    nextMaintenance: "2024-06-01",
-    surface: "Clay",
-    lights: false,
-  },
-  {
-    id: 4,
-    name: "Court 4",
-    type: "Padel",
-    status: "Available",
-    lastMaintenance: "2024-03-25",
-    nextMaintenance: "2024-05-25",
-    surface: "Artificial Grass",
-    lights: true,
-  },
-];
+import { useState, useEffect } from 'react'
+import { getAllCourts, createCourt, updateCourt, deleteCourt } from '@/services/courts'
+import { Court } from '@/types'
+import { Button } from '@/components/ui/button'
+import { Plus } from 'lucide-react'
+import { CourtForm } from '@/components/courts/CourtForm'
+import { CourtList } from '@/components/courts/CourtList'
+import { useToast } from '@/hooks/use-toast'
 
 export function Courts() {
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [typeFilter, setTypeFilter] = useState("all");
+  const [courts, setCourts] = useState<Court[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [isFormOpen, setIsFormOpen] = useState(false)
+  const [editingCourt, setEditingCourt] = useState<Court | null>(null)
+  const { toast } = useToast()
 
-  const filteredCourts = courts.filter((court) => {
-    const matchesStatus =
-      statusFilter === "all" || court.status === statusFilter;
-    const matchesType = typeFilter === "all" || court.type === typeFilter;
-    return matchesStatus && matchesType;
-  });
+  const fetchCourts = async () => {
+    try {
+      setLoading(true)
+      const data = await getAllCourts()
+      setCourts(data)
+      setError(null)
+    } catch (err) {
+      console.error('Error fetching courts:', err)
+      setError('Failed to fetch courts')
+      toast({
+        title: 'Error',
+        description: 'Failed to fetch courts',
+        variant: 'destructive',
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchCourts()
+  }, [])
+
+  const handleCreate = async (data: Partial<Court>) => {
+    try {
+      const newCourt = await createCourt(data)
+      setCourts([...courts, newCourt])
+      setIsFormOpen(false)
+      toast({
+        title: 'Success',
+        description: 'Court created successfully',
+      })
+    } catch (err) {
+      console.error('Error creating court:', err)
+      toast({
+        title: 'Error',
+        description: 'Failed to create court',
+        variant: 'destructive',
+      })
+    }
+  }
+
+  const handleUpdate = async (id: number, data: Partial<Court>) => {
+    try {
+      const updatedCourt = await updateCourt(id, data)
+      setCourts(courts.map(court => 
+        court.id === id ? updatedCourt : court
+      ))
+      setEditingCourt(null)
+      toast({
+        title: 'Success',
+        description: 'Court updated successfully',
+      })
+    } catch (err) {
+      console.error('Error updating court:', err)
+      toast({
+        title: 'Error',
+        description: 'Failed to update court',
+        variant: 'destructive',
+      })
+    }
+  }
+
+  const handleDelete = async (id: number) => {
+    try {
+      await deleteCourt(id)
+      setCourts(courts.filter(court => court.id !== id))
+      toast({
+        title: 'Success',
+        description: 'Court deleted successfully',
+      })
+    } catch (err) {
+      console.error('Error deleting court:', err)
+      toast({
+        title: 'Error',
+        description: 'Failed to delete court',
+        variant: 'destructive',
+      })
+    }
+  }
+
+  if (loading) {
+    return <div>Loading...</div>
+  }
+
+  if (error) {
+    return <div>Error: {error}</div>
+  }
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-3xl font-bold tracking-tight">Courts</h2>
-          <p className="text-muted-foreground">
-            Manage your tennis and padel courts
-          </p>
-        </div>
-        <Button>
-          <Plus className="mr-2 h-4 w-4" />
+      <div className="flex justify-between items-center">
+        <h1 className="text-2xl font-bold">Courts</h1>
+        <Button onClick={() => setIsFormOpen(true)}>
+          <Plus className="w-4 h-4 mr-2" />
           Add Court
         </Button>
       </div>
 
-      <div className="flex gap-2">
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="Status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Status</SelectItem>
-            <SelectItem value="Available">Available</SelectItem>
-            <SelectItem value="Booked">Booked</SelectItem>
-            <SelectItem value="Maintenance">Maintenance</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select value={typeFilter} onValueChange={setTypeFilter}>
-          <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="Court Type" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Types</SelectItem>
-            <SelectItem value="Tennis">Tennis</SelectItem>
-            <SelectItem value="Padel">Padel</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
+      <CourtList
+        courts={courts}
+        onEdit={setEditingCourt}
+        onDelete={handleDelete}
+      />
 
-      <div className="rounded-md border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>Type</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Surface</TableHead>
-              <TableHead>Facilities</TableHead>
-              <TableHead>Maintenance</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {filteredCourts.map((court) => (
-              <TableRow key={court.id}>
-                <TableCell className="font-medium">{court.name}</TableCell>
-                <TableCell>{court.type}</TableCell>
-                <TableCell>
-                  <Badge
-                    variant={
-                      court.status === "Available"
-                        ? "default"
-                        : court.status === "Booked"
-                        ? "secondary"
-                        : "destructive"
-                    }
-                  >
-                    {court.status}
-                  </Badge>
-                </TableCell>
-                <TableCell>{court.surface}</TableCell>
-                <TableCell>
-                  <div className="flex items-center gap-2">
-                    {court.lights && (
-                      <Badge variant="outline">Lights</Badge>
-                    )}
-                  </div>
-                </TableCell>
-                <TableCell>
-                  <div className="flex flex-col gap-1">
-                    <div className="flex items-center gap-2">
-                      <Calendar className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-sm">
-                        Last: {court.lastMaintenance}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Wrench className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-sm">
-                        Next: {court.nextMaintenance}
-                      </span>
-                    </div>
-                  </div>
-                </TableCell>
-                <TableCell className="text-right">
-                  <Button variant="ghost" size="sm">
-                    Edit
-                  </Button>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
+      {isFormOpen && (
+        <CourtForm
+          onSubmit={handleCreate}
+          onCancel={() => setIsFormOpen(false)}
+        />
+      )}
+
+      {editingCourt && (
+        <CourtForm
+          court={editingCourt}
+          onSubmit={(data) => handleUpdate(editingCourt.id, data)}
+          onCancel={() => setEditingCourt(null)}
+        />
+      )}
     </div>
-  );
+  )
 } 

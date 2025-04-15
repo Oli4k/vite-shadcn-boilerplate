@@ -1,23 +1,20 @@
-import 'fastify'
 import '@fastify/jwt'
+import { $Enums } from '@prisma/client'
+
+export interface AuthUser {
+  userId: string
+  role: $Enums.UserRole
+}
 
 declare module 'fastify' {
   interface FastifyRequest {
-    user: {
-      userId: string
-      iat: number
-      exp: number
-    }
+    user?: AuthUser
   }
 }
 
 declare module '@fastify/jwt' {
   interface FastifyJWT {
-    payload: {
-      userId: string
-    }
-    user: {
-      userId: string
-    }
+    payload: AuthUser
+    user: AuthUser
   }
 } 

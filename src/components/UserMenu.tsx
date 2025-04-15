@@ -25,7 +25,7 @@ export function UserMenu() {
         .split(" ")
         .map((n) => n[0])
         .join("")
-    : user.email[0].toUpperCase();
+    : user.email ? user.email[0].toUpperCase() : 'U';
 
   return (
     <DropdownMenu open={isOpen} onOpenChange={setIsOpen}>
@@ -42,9 +42,9 @@ export function UserMenu() {
       <DropdownMenuContent className="w-56" align="end" forceMount>
         <DropdownMenuLabel className="font-normal">
           <div className="flex flex-col space-y-1">
-            <p className="text-sm font-medium leading-none">{user.name || user.email}</p>
+            <p className="text-sm font-medium leading-none">{user.name || user.email || 'User'}</p>
             <p className="text-xs leading-none text-muted-foreground">
-              {user.email}
+              {user.email || 'No email'}
             </p>
           </div>
         </DropdownMenuLabel>

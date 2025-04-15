@@ -1,82 +1,156 @@
-import { Router } from 'express'
-import { PrismaClient } from '@prisma/client'
-import { authenticateToken } from '@/middleware/auth'
 import { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { generateVerificationCode, verifyCode } from '../../services/emailVerification'
 import { sendMemberInvitation, sendInvite } from '../../services/email'
 import { v4 as uuidv4 } from 'uuid'
 import { prisma } from '../../lib/prisma'
+import { MembershipType, MemberStatus } from '@prisma/client'
+import crypto from 'crypto'
 
-const router = Router()
-const prismaClient = new PrismaClient()
+interface CreateMemberBody {
+  name: string
+  email: string
+  phone?: string | null
+  address?: string | null
+  membershipType?: MembershipType
+  status?: MemberStatus
+  notes?: string | null
+}
 
-// Get all members
-router.get('/', authenticateToken, async (req, res) => {
-  try {
-    const members = await prismaClient.member.findMany({
-      include: {
-        managedBy: {
-          select: {
-            id: true,
-            name: true,
-          },
+interface UpdateMemberBody {
+  name?: string
+  email?: string
+  phone?: string | null
+  address?: string | null
+  membershipType?: MembershipType
+  status?: MemberStatus
+  notes?: string | null
+}
+
+interface RouteParams {
+  id: string
+}
+
+export async function membersRoutes(app: FastifyInstance) {
+  // Get all members
+  app.get('/members', async (request, reply) => {
+    try {
+      const members = await prisma.member.findMany({
+        include: {
+          user: true,
         },
-      },
-      orderBy: {
-        createdAt: 'desc',
-      },
-    })
-    res.json(members)
-  } catch (error) {
-    console.error('Error fetching members:', error)
-    res.status(500).json({ error: 'Failed to fetch members' })
-  }
-})
-
-// Create a new member
-router.post('/', authenticateToken, async (req, res) => {
-  try {
-    const { name, email, phone, address, membershipType, status, notes } = req.body
-
-    // Validate required fields
-    if (!name || !email) {
-      return res.status(400).json({ error: 'Name and email are required' })
+      })
+      return reply.send(members)
+    } catch (error) {
+      console.error('Error fetching members:', error)
+      return reply.status(500).send({ error: 'Failed to fetch members' })
     }
+  })
 
-    const member = await prismaClient.member.create({
-      data: {
-        name,
-        email,
-        phone,
-        address,
-        membershipType,
-        status,
-        notes,
-        managedById: req.user?.id, // Set the current user as the manager
-      },
-      include: {
-        managedBy: {
-          select: {
-            id: true,
-            name: true,
-          },
+  // Get member by ID
+  app.get<{ Params: { id: string } }>('/members/:id', async (request, reply) => {
+    try {
+      const member = await prisma.member.findUnique({
+        where: { id: request.params.id },
+        include: {
+          user: true,
         },
-      },
-    })
-
-    res.status(201).json(member)
-  } catch (error) {
-    console.error('Error creating member:', error)
-    if (error.code === 'P2002') {
-      res.status(400).json({ error: 'Email already exists' })
-    } else {
-      res.status(500).json({ error: 'Failed to create member' })
+      })
+      if (!member) {
+        return reply.status(404).send({ error: 'Member not found' })
+      }
+      return reply.send(member)
+    } catch (error) {
+      console.error('Error fetching member:', error)
+      return reply.status(500).send({ error: 'Failed to fetch member' })
     }
-  }
-})
+  })
 
-export async function memberRoutes(app: FastifyInstance) {
+  // Create member
+  app.post<{ Body: CreateMemberBody }>('/members', async (request, reply) => {
+    try {
+      const { name, email, phone, address, membershipType, status, notes } = request.body
+      const member = await prisma.member.create({
+        data: {
+          name,
+          email,
+          phone,
+          address,
+          membershipType: membershipType || 'REGULAR',
+          status: status || 'PENDING',
+          notes,
+          managedById: request.user?.userId,
+        },
+        include: {
+          user: true,
+        },
+      })
+      return reply.status(201).send(member)
+    } catch (error) {
+      console.error('Error creating member:', error)
+      if ((error as any).code === 'P2002') {
+        return reply.status(400).send({ error: 'Email already exists' })
+      }
+      return reply.status(500).send({ error: 'Failed to create member' })
+    }
+  })
+
+  // Update member
+  app.put<{ Params: { id: string }; Body: UpdateMemberBody }>('/members/:id', async (request, reply) => {
+    try {
+      const { name, email, phone, address, membershipType, status, notes } = request.body
+      const member = await prisma.member.update({
+        where: { id: request.params.id },
+        data: {
+          name,
+          email,
+          phone,
+          address,
+          membershipType,
+          status,
+          notes,
+        },
+        include: {
+          user: true,
+        },
+      })
+      return reply.send(member)
+    } catch (error) {
+      console.error('Error updating member:', error)
+      return reply.status(500).send({ error: 'Failed to update member' })
+    }
+  })
+
+  // Delete member
+  app.delete<{ Params: { id: string } }>('/members/:id', async (request, reply) => {
+    try {
+      await prisma.member.delete({
+        where: { id: request.params.id },
+      })
+      return reply.status(204).send()
+    } catch (error) {
+      console.error('Error deleting member:', error)
+      return reply.status(500).send({ error: 'Failed to delete member' })
+    }
+  })
+
+  // Update member status
+  app.patch<{ Params: { id: string }; Body: { status: MemberStatus } }>('/members/:id/status', async (request, reply) => {
+    try {
+      const member = await prisma.member.update({
+        where: { id: request.params.id },
+        data: { status: request.body.status },
+        include: {
+          user: true,
+        },
+      })
+      return reply.send(member)
+    } catch (error) {
+      console.error('Error updating member status:', error)
+      return reply.status(500).send({ error: 'Failed to update member status' })
+    }
+  })
+
   app.post('/members/:id/verify-email', async (request, reply) => {
     const paramsSchema = z.object({
       id: z.string().uuid(),
@@ -88,7 +162,7 @@ export async function memberRoutes(app: FastifyInstance) {
     const { id } = paramsSchema.parse(request.params)
     const { code } = bodySchema.parse(request.body)
 
-    const member = await prismaClient.member.findUnique({
+    const member = await prisma.member.findUnique({
       where: { id },
     })
 
@@ -98,9 +172,9 @@ export async function memberRoutes(app: FastifyInstance) {
 
     try {
       await verifyCode(member.email, code)
-      await prismaClient.member.update({
+      await prisma.member.update({
         where: { id },
-        data: { emailVerified: true },
+        data: { status: 'ACTIVE' },
       })
       return { success: true }
     } catch (error) {
@@ -115,7 +189,7 @@ export async function memberRoutes(app: FastifyInstance) {
 
     const { id } = paramsSchema.parse(request.params)
 
-    const member = await prismaClient.member.findUnique({
+    const member = await prisma.member.findUnique({
       where: { id },
     })
 
@@ -124,7 +198,7 @@ export async function memberRoutes(app: FastifyInstance) {
     }
 
     const invitationToken = uuidv4()
-    await prismaClient.member.update({
+    await prisma.member.update({
       where: { id },
       data: { invitationToken },
     })
@@ -140,7 +214,7 @@ export async function memberRoutes(app: FastifyInstance) {
 
     const { id } = paramsSchema.parse(request.params)
 
-    const member = await prismaClient.member.findUnique({
+    const member = await prisma.member.findUnique({
       where: { id },
     })
 
@@ -153,7 +227,7 @@ export async function memberRoutes(app: FastifyInstance) {
     }
 
     const invitationToken = uuidv4()
-    await prismaClient.member.update({
+    await prisma.member.update({
       where: { id },
       data: { invitationToken },
     })
@@ -161,6 +235,62 @@ export async function memberRoutes(app: FastifyInstance) {
     await sendInvite(member.email, member.name, invitationToken)
     return { success: true }
   })
-}
 
-export default router 
+  // Verify member email
+  app.post<{ Body: { email: string; code: string } }>('/members/verify-email', async (request, reply) => {
+    try {
+      const { email, code } = request.body
+      const verification = await prisma.emailVerification.findFirst({
+        where: {
+          email,
+          code,
+          used: false,
+          expiresAt: { gt: new Date() },
+        },
+      })
+
+      if (!verification) {
+        return reply.status(400).send({ error: 'Invalid or expired verification code' })
+      }
+
+      await prisma.$transaction([
+        prisma.member.update({
+          where: { email },
+          data: { status: 'ACTIVE' },
+        }),
+        prisma.emailVerification.update({
+          where: { id: verification.id },
+          data: { used: true },
+        }),
+      ])
+
+      return reply.send({ message: 'Email verified successfully' })
+    } catch (error) {
+      return reply.status(500).send({ error: 'Failed to verify email' })
+    }
+  })
+
+  // Send member invitation
+  app.post<{ Body: { email: string } }>('/members/invite', async (request, reply) => {
+    try {
+      const { email } = request.body
+      const invitationToken = crypto.randomUUID()
+      
+      const member = await prisma.member.create({
+        data: {
+          email,
+          name: 'Pending Member',
+          status: 'PENDING',
+          membershipType: 'REGULAR',
+          invitationToken,
+          managedById: request.user?.userId,
+        },
+      })
+
+      // TODO: Send invitation email with token
+      return reply.status(201).send({ message: 'Invitation sent successfully' })
+    } catch (error) {
+      return reply.status(500).send({ error: 'Failed to send invitation' })
+    }
+  })
+}

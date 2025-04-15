@@ -28,7 +28,7 @@ interface Member {
 }
 
 export default function Members() {
-  const { user, getAccessToken } = useAuth()
+  const { user } = useAuth()
   const { toast } = useToast()
   const [members, setMembers] = useState<Member[]>([])
   const [loading, setLoading] = useState(true)
@@ -45,17 +45,8 @@ export default function Members() {
 
   const fetchMembers = async () => {
     try {
-      const token = getAccessToken()
-      if (!token) {
-        setError('Not authenticated')
-        setLoading(false)
-        return
-      }
-
       const response = await fetch('/api/members', {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        credentials: 'include',
       })
       if (!response.ok) {
         throw new Error('Failed to fetch members')

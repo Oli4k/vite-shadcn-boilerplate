@@ -3,14 +3,14 @@ import { Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from '@/contexts/auth-context'
 
 export function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, isLoading, refreshToken } = useAuth()
+  const { isAuthenticated, isLoading, checkAuth } = useAuth()
   const location = useLocation()
 
   useEffect(() => {
     if (!isAuthenticated && !isLoading) {
-      refreshToken()
+      checkAuth()
     }
-  }, [isAuthenticated, isLoading, refreshToken])
+  }, [isAuthenticated, isLoading, checkAuth])
 
   if (isLoading) {
     return <div>Loading...</div>
