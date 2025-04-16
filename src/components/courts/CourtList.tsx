@@ -51,39 +51,47 @@ export function CourtList({ courts, onEdit, onDelete }: CourtListProps) {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {courts.map(court => (
-            <TableRow key={court.id}>
-              <TableCell>{court.name}</TableCell>
-              <TableCell>{formatEnumValue(court.surface)}</TableCell>
-              <TableCell>{formatEnumValue(court.type)}</TableCell>
-              <TableCell>
-                <Badge className={getStatusColor(court.status)}>
-                  {formatEnumValue(court.status)}
-                </Badge>
-              </TableCell>
-              <TableCell>
-                <Badge variant={court.hasLights ? 'default' : 'secondary'}>
-                  {court.hasLights ? 'Yes' : 'No'}
-                </Badge>
-              </TableCell>
-              <TableCell className="text-right">
-                <Button
-                  variant="ghost"
-                  className="mr-2"
-                  onClick={() => onEdit(court)}
-                >
-                  Edit
-                </Button>
-                <Button
-                  variant="ghost"
-                  className="text-red-500"
-                  onClick={() => onDelete(court.id)}
-                >
-                  Delete
-                </Button>
+          {courts.length === 0 ? (
+            <TableRow>
+              <TableCell colSpan={6} className="text-center text-gray-500">
+                No courts available
               </TableCell>
             </TableRow>
-          ))}
+          ) : (
+            courts.map(court => (
+              <TableRow key={court.id}>
+                <TableCell>{court.name}</TableCell>
+                <TableCell>{formatEnumValue(court.surface)}</TableCell>
+                <TableCell>{formatEnumValue(court.type)}</TableCell>
+                <TableCell>
+                  <Badge className={getStatusColor(court.status)}>
+                    {formatEnumValue(court.status)}
+                  </Badge>
+                </TableCell>
+                <TableCell>
+                  <Badge variant={court.hasLights ? 'default' : 'secondary'}>
+                    {court.hasLights ? 'Yes' : 'No'}
+                  </Badge>
+                </TableCell>
+                <TableCell className="text-right">
+                  <Button
+                    variant="ghost"
+                    className="mr-2"
+                    onClick={() => onEdit(court)}
+                  >
+                    Edit
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    className="text-red-500"
+                    onClick={() => onDelete(court.id)}
+                  >
+                    Delete
+                  </Button>
+                </TableCell>
+              </TableRow>
+            ))
+          )}
         </TableBody>
       </Table>
     </div>

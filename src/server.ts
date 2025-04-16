@@ -47,6 +47,11 @@ app.register(jwtPlugin, {
   },
   sign: {
     expiresIn: '1d'
+  },
+  verify: {
+    extractToken: (request) => {
+      return request.cookies.accessToken
+    }
   }
 })
 
