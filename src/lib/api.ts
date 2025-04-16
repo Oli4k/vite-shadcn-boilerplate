@@ -5,15 +5,7 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
-})
-
-// Add auth token to requests if it exists
-api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
-  const token = localStorage.getItem('token')
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`
-  }
-  return config
+  withCredentials: true, // Enable sending cookies with requests
 })
 
 // Add response interceptor for error handling
@@ -28,6 +20,11 @@ api.interceptors.response.use(
         data: error.response.data,
         headers: error.response.headers,
       })
+
+      // If we get a 401, we should redirect to login
+      if (error.response.status === 401) {
+        window.location.href = '/login'
+      }
     } else if (error.request) {
       // The request was made but no response was received
       console.error('API Error Request:', error.request)

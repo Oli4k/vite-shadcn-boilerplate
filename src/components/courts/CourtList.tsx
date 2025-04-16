@@ -52,14 +52,14 @@ export function CourtList({ courts, onEdit, onDelete }: CourtListProps) {
         </TableHeader>
         <TableBody>
           {courts.length === 0 ? (
-            <TableRow>
+            <TableRow key="no-courts">
               <TableCell colSpan={6} className="text-center text-gray-500">
                 No courts available
               </TableCell>
             </TableRow>
           ) : (
-            courts.map(court => (
-              <TableRow key={court.id}>
+            courts.map((court, index) => (
+              <TableRow key={court.id ? `court-${court.id}` : `court-${index}`}>
                 <TableCell>{court.name}</TableCell>
                 <TableCell>{formatEnumValue(court.surface)}</TableCell>
                 <TableCell>{formatEnumValue(court.type)}</TableCell>

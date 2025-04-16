@@ -1,4 +1,4 @@
-import { Routes, Route } from 'react-router-dom'
+import { Routes, Route, Navigate } from 'react-router-dom'
 import { Toaster } from 'sonner'
 import { AuthProvider } from '@/contexts/auth-context'
 import { ProtectedRoute } from '@/components/protected-route'
@@ -16,13 +16,19 @@ import EditMember from '@/pages/EditMember'
 import MemberBookings from './pages/MemberBookings'
 import { Packages } from '@/pages/Packages'
 import AcceptInvitation from '@/pages/AcceptInvitation'
+import { useAuth } from '@/contexts/auth-context'
+
+function RootRedirect() {
+  const { isAuthenticated } = useAuth()
+  return isAuthenticated ? <Navigate to="/dashboard" replace /> : <Navigate to="/login" replace />
+}
 
 export function App() {
   return (
     <AuthProvider>
       <Toaster />
       <Routes>
-        <Route path="/" element={<Login />} />
+        <Route path="/" element={<RootRedirect />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
