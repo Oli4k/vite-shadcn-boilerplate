@@ -4,8 +4,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
-import { toast } from '@/hooks/use-toast'
-import { useAuth } from '@/lib/auth-context'
+import { toast } from 'sonner'
+import { useAuth } from '@/contexts/auth-context'
 
 export function RegisterForm() {
   const [email, setEmail] = useState('')
@@ -36,18 +36,11 @@ export function RegisterForm() {
 
       login(data.token, data.user)
       
-      toast({
-        title: 'Success',
-        description: 'Your account has been created successfully',
-      })
+      toast.success('Your account has been created successfully')
 
       navigate('/')
     } catch (error) {
-      toast({
-        title: 'Error',
-        description: error instanceof Error ? error.message : 'Registration failed',
-        variant: 'destructive',
-      })
+      toast.error(error instanceof Error ? error.message : 'Registration failed')
     } finally {
       setIsLoading(false)
     }
