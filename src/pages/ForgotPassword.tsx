@@ -2,18 +2,18 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
-import { toast } from '@/hooks/use-toast'
+import { toast } from 'sonner'
 
-export function ForgotPassword() {
+export default function ForgotPassword() {
   const [email, setEmail] = useState('')
-  const [isLoading, setIsLoading] = useState(false)
+  const [loading, setLoading] = useState(false)
   const navigate = useNavigate()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setIsLoading(true)
+    setLoading(true)
 
     try {
       const response = await fetch('/api/auth/forgot-password', {
@@ -27,63 +27,53 @@ export function ForgotPassword() {
       const data = await response.json()
 
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to send reset email')
+        throw new Error(data.error || 'Failed to send reset code')
       }
 
-      toast({
-        title: 'Success',
-        description: 'If an account exists with this email, you will receive a password reset link.',
-      })
-
-      navigate('/login')
+      toast.success('If an account exists with this email, you will receive a reset code')
+      navigate(`/reset-password?email=${encodeURIComponent(email)}`)
     } catch (error) {
-      toast({
-        title: 'Error',
-        description: error instanceof Error ? error.message : 'Failed to send reset email',
-        variant: 'destructive',
-      })
+      toast.error(error instanceof Error ? error.message : 'Failed to send reset code')
     } finally {
-      setIsLoading(false)
+      setLoading(false)
     }
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4">
-      <Card className="w-[350px]">
+    <div className="container max-w-md mx-auto py-12">
+      <Card>
         <CardHeader>
           <CardTitle>Forgot Password</CardTitle>
-          <CardDescription>Enter your email to receive a password reset link</CardDescription>
+          <CardDescription>
+            Enter your email address and we'll send you a code to reset your password
+          </CardDescription>
         </CardHeader>
-        <form onSubmit={handleSubmit}>
-          <CardContent>
-            <div className="grid w-full items-center gap-4">
-              <div className="flex flex-col space-y-1.5">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="Enter your email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                />
-              </div>
+        <CardContent>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="email">Email Address</Label>
+              <Input
+                id="email"
+                type="email"
+                placeholder="Enter your email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+              />
             </div>
-          </CardContent>
-          <CardFooter className="flex flex-col gap-4">
-            <Button type="submit" disabled={isLoading} className="w-full">
-              {isLoading ? 'Sending...' : 'Send Reset Link'}
+            <Button type="submit" className="w-full" disabled={loading}>
+              {loading ? 'Sending Code...' : 'Send Reset Code'}
             </Button>
             <Button
               type="button"
               variant="outline"
-              onClick={() => navigate('/login')}
               className="w-full"
+              onClick={() => navigate('/login')}
             >
               Back to Login
             </Button>
-          </CardFooter>
-        </form>
+          </form>
+        </CardContent>
       </Card>
     </div>
   )

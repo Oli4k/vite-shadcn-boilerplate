@@ -181,19 +181,24 @@ app.post('/api/auth/forgot-password', async (request: FastifyRequest<{ Body: { e
     const token = Math.floor(100000 + Math.random() * 900000).toString()
     const expiresAt = new Date(Date.now() + 15 * 60 * 1000) // 15 minutes
 
+    // Hash the token before storing
+    const hashedToken = await bcrypt.hash(token, 10)
+
     console.log('Creating reset token for user:', user.id)
     // Create reset token
-    await prisma.passwordResetToken.create({
+    const resetToken = await prisma.passwordResetToken.create({
       data: {
-        token,
+        token: hashedToken,
         userId: user.id,
         expiresAt,
       },
     })
+    console.log('Reset token created:', resetToken.id)
 
     console.log('Sending reset email to:', email)
-    // Send reset email
+    // Send reset email with the original token
     await sendPasswordResetEmail(email, token)
+    console.log('Reset email sent successfully')
 
     return { message: 'If an account exists with this email, you will receive a password reset link.' }
   } catch (error) {
@@ -212,20 +217,30 @@ app.post('/api/auth/forgot-password', async (request: FastifyRequest<{ Body: { e
 app.post('/api/auth/verify-reset-token', async (request: FastifyRequest<{ Body: { token: string } }>, reply: FastifyReply) => {
   try {
     const { token } = request.body
-    const resetToken = await prisma.passwordResetToken.findFirst({
+    const resetTokens = await prisma.passwordResetToken.findMany({
       where: {
-        token,
         used: false,
         expiresAt: {
           gt: new Date(),
         },
+        attempts: {
+          lt: 3 // Maximum 3 attempts
+        }
       },
       include: {
         user: true,
       },
     })
 
-    if (!resetToken) {
+    // Find the matching token by comparing hashes
+    const validToken = await Promise.all(
+      resetTokens.map(async (resetToken) => {
+        const isValid = await bcrypt.compare(token, resetToken.token)
+        return isValid ? resetToken : null
+      })
+    ).then(tokens => tokens.find(token => token !== null))
+
+    if (!validToken) {
       return reply.status(400).send({ error: 'Invalid or expired token' })
     }
 
@@ -239,34 +254,63 @@ app.post('/api/auth/verify-reset-token', async (request: FastifyRequest<{ Body: 
 app.post('/api/auth/reset-password', async (request: FastifyRequest<{ Body: { token: string; password: string } }>, reply: FastifyReply) => {
   try {
     const { token, password } = request.body
-    const resetToken = await prisma.passwordResetToken.findFirst({
+
+    // Find all active reset tokens
+    const resetTokens = await prisma.passwordResetToken.findMany({
       where: {
-        token,
         used: false,
         expiresAt: {
           gt: new Date(),
         },
+        attempts: {
+          lt: 3 // Maximum 3 attempts
+        }
       },
       include: {
         user: true,
       },
     })
 
-    if (!resetToken) {
-      return reply.status(400).send({ error: 'Invalid or expired token' })
+    // Find the matching token by comparing hashes
+    const validToken = await Promise.all(
+      resetTokens.map(async (resetToken) => {
+        const isValid = await bcrypt.compare(token, resetToken.token)
+        return isValid ? resetToken : null
+      })
+    ).then(tokens => tokens.find(token => token !== null))
+
+    if (!validToken) {
+      // Increment attempt counter for all tokens that match the user
+      if (resetTokens.length > 0) {
+        await prisma.passwordResetToken.updateMany({
+          where: {
+            userId: resetTokens[0].userId,
+            used: false,
+            expiresAt: {
+              gt: new Date(),
+            }
+          },
+          data: {
+            attempts: {
+              increment: 1
+            }
+          }
+        })
+      }
+      return reply.status(400).send({ error: 'Invalid or expired code' })
     }
 
     // Hash new password
     const hashedPassword = await bcrypt.hash(password, 10)
 
-    // Update user password and mark token as used
+    // Update user password and mark token as used in a transaction
     await prisma.$transaction([
       prisma.user.update({
-        where: { id: resetToken.userId },
+        where: { id: validToken.userId },
         data: { password: hashedPassword },
       }),
       prisma.passwordResetToken.update({
-        where: { id: resetToken.id },
+        where: { id: validToken.id },
         data: { used: true },
       }),
     ])

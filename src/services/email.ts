@@ -98,41 +98,31 @@ export async function sendInvite(email: string, name: string, token: string) {
   console.log('📧 Or check your Ethereal inbox at: https://ethereal.email/\n')
 }
 
-export async function sendPasswordResetEmail(email: string, token: string) {
-  const resetUrl = `${APP_URL}/reset-password?token=${token}`
-  
+export const sendPasswordResetEmail = async (email: string, token: string) => {
   const mailOptions = {
-    from: `"${APP_NAME}" <${process.env.SMTP_FROM}>`,
+    from: process.env.EMAIL_FROM,
     to: email,
-    subject: 'Password Reset Request',
+    subject: 'Password Reset Code',
     html: `
-      <h1>Password Reset Request</h1>
-      <p>You have requested to reset your password for ${APP_NAME}. Use the following token to reset your password:</p>
-      <h2 style="font-size: 24px; letter-spacing: 5px; margin: 20px 0;">${token}</h2>
-      <p>Or click this link to reset your password:</p>
-      <p><a href="${resetUrl}">Reset Password</a></p>
-      <p>This token will expire in 15 minutes.</p>
-      <p>If you did not request this password reset, please ignore this email.</p>
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2>Password Reset Request</h2>
+        <p>You have requested to reset your password. Please use the following 6-digit code to verify your identity:</p>
+        <div style="background-color: #f5f5f5; padding: 15px; text-align: center; font-size: 24px; letter-spacing: 5px; margin: 20px 0;">
+          ${token}
+        </div>
+        <p>This code will expire in 15 minutes.</p>
+        <p>If you did not request this password reset, please ignore this email.</p>
+        <p style="color: #666; font-size: 12px; margin-top: 20px;">
+          For security reasons, this code can only be used once and will expire after 15 minutes.
+        </p>
+      </div>
     `,
   }
 
   try {
-    console.log('Attempting to send email to:', email)
-    const info = await transporter.sendMail(mailOptions)
-    console.log('Email sent successfully:', {
-      messageId: info.messageId,
-      to: email,
-      response: info.response
-    })
+    await transporter.sendMail(mailOptions)
   } catch (error) {
     console.error('Error sending password reset email:', error)
-    if (error instanceof Error) {
-      console.error('Email error details:', {
-        message: error.message,
-        stack: error.stack,
-        name: error.name
-      })
-    }
     throw new Error('Failed to send password reset email')
   }
 } 
