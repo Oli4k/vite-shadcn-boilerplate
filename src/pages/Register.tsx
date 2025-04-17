@@ -45,29 +45,30 @@ export function Register() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+    <div className="container mx-auto p-4 h-full flex items-center justify-center">
       <Card className="w-full max-w-md">
-        <CardHeader>
-          <CardTitle>Create an account</CardTitle>
-          <CardDescription>Enter your details to register</CardDescription>
+        <CardHeader className="p-3">
+          <CardTitle className="text-base">Create an account</CardTitle>
+          <CardDescription className="text-xs">Enter your details to register</CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-3">
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-3">
               <FormField
                 control={form.control}
                 name="name"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Name</FormLabel>
+                    <FormLabel className="text-sm">Name</FormLabel>
                     <FormControl>
                       <Input
                         placeholder="John Doe"
                         {...field}
                         autoComplete="name"
+                        className="text-sm"
                       />
                     </FormControl>
-                    <FormMessage />
+                    <FormMessage className="text-xs" />
                   </FormItem>
                 )}
               />
@@ -76,15 +77,16 @@ export function Register() {
                 name="email"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Email</FormLabel>
+                    <FormLabel className="text-sm">Email</FormLabel>
                     <FormControl>
                       <Input
                         placeholder="john@example.com"
                         {...field}
                         autoComplete="email"
+                        className="text-sm"
                       />
                     </FormControl>
-                    <FormMessage />
+                    <FormMessage className="text-xs" />
                   </FormItem>
                 )}
               />
@@ -93,27 +95,28 @@ export function Register() {
                 name="password"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Password</FormLabel>
+                    <FormLabel className="text-sm">Password</FormLabel>
                     <FormControl>
                       <Input
                         type="password"
                         placeholder="••••••••"
                         {...field}
                         autoComplete="new-password"
+                        className="text-sm"
                       />
                     </FormControl>
-                    <FormMessage />
+                    <FormMessage className="text-xs" />
                   </FormItem>
                 )}
               />
-              <Button type="submit" className="w-full" disabled={loading}>
+              <Button type="submit" className="w-full text-sm" disabled={loading}>
                 {loading ? 'Creating Account...' : 'Register'}
               </Button>
             </form>
           </Form>
         </CardContent>
-        <CardFooter className="flex justify-center">
-          <p className="text-sm text-gray-600">
+        <CardFooter className="p-3 flex justify-center">
+          <p className="text-xs text-gray-600">
             Already have an account?{' '}
             <Link to="/login" className="text-blue-600 hover:underline">
               Login

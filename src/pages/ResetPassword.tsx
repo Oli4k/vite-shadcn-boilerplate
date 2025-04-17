@@ -153,16 +153,16 @@ export default function ResetPassword() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4">
+    <div className="container mx-auto p-4 h-full flex items-center justify-center">
       <Card className="w-full max-w-md">
-        <CardHeader>
-          <CardTitle>
+        <CardHeader className="p-3">
+          <CardTitle className="text-base">
             {step === 'email' && 'Reset Password'}
             {step === 'code' && 'Enter Verification Code'}
             {step === 'password' && 'Set New Password'}
             {step === 'success' && 'Password Reset Successful'}
           </CardTitle>
-          <CardDescription>
+          <CardDescription className="text-xs">
             {step === 'email' && 'Enter your email address to receive a reset code'}
             {step === 'code' && `Enter the 6-digit code sent to ${email}`}
             {step === 'password' && 'Please enter your new password'}
@@ -172,10 +172,10 @@ export default function ResetPassword() {
 
         {step === 'email' && (
           <form onSubmit={handleSendCode}>
-            <CardContent>
-              <div className="grid w-full items-center gap-4">
+            <CardContent className="p-3">
+              <div className="grid w-full items-center gap-3">
                 <div className="flex flex-col space-y-1.5">
-                  <Label htmlFor="email">Email Address</Label>
+                  <Label htmlFor="email" className="text-sm">Email Address</Label>
                   <Input
                     id="email"
                     type="email"
@@ -184,19 +184,20 @@ export default function ResetPassword() {
                     onChange={(e) => setEmail(e.target.value)}
                     required
                     autoComplete="email"
+                    className="text-sm"
                   />
                 </div>
               </div>
             </CardContent>
-            <CardFooter className="flex flex-col gap-4">
-              <Button type="submit" className="w-full" disabled={loading}>
+            <CardFooter className="p-3 flex flex-col gap-3">
+              <Button type="submit" className="w-full text-sm" disabled={loading}>
                 {loading ? 'Sending Code...' : 'Send Reset Code'}
               </Button>
               <Button
                 type="button"
                 variant="outline"
                 onClick={() => navigate('/login')}
-                className="w-full"
+                className="w-full text-sm"
               >
                 Back to Login
               </Button>
@@ -206,10 +207,10 @@ export default function ResetPassword() {
 
         {step === 'code' && (
           <form onSubmit={handleVerifyCode}>
-            <CardContent>
-              <div className="grid w-full items-center gap-4">
+            <CardContent className="p-3">
+              <div className="grid w-full items-center gap-3">
                 <div className="flex flex-col space-y-1.5">
-                  <Label>Verification Code</Label>
+                  <Label className="text-sm">Verification Code</Label>
                   <VerificationCodeInput
                     onChange={setCode}
                     className="justify-center"
@@ -219,7 +220,7 @@ export default function ResetPassword() {
                     variant="link"
                     onClick={handleResendCode}
                     disabled={loading || resendCooldown > 0}
-                    className="w-full mt-2"
+                    className="w-full mt-2 text-xs"
                   >
                     {loading
                       ? 'Sending Code...'
@@ -230,17 +231,17 @@ export default function ResetPassword() {
                 </div>
               </div>
             </CardContent>
-            <CardFooter className="flex flex-col gap-4">
+            <CardFooter className="p-3 flex flex-col gap-3">
               <div className="flex gap-2 w-full">
                 <Button
                   type="button"
                   variant="outline"
                   onClick={() => setStep('email')}
-                  className="flex-1"
+                  className="flex-1 text-sm"
                 >
                   Back
                 </Button>
-                <Button type="submit" className="flex-1" disabled={loading || code.length !== 6}>
+                <Button type="submit" className="flex-1 text-sm" disabled={loading || code.length !== 6}>
                   {loading ? 'Verifying...' : 'Verify Code'}
                 </Button>
               </div>
@@ -250,62 +251,46 @@ export default function ResetPassword() {
 
         {step === 'password' && (
           <form onSubmit={handleResetPassword}>
-            <CardContent>
-              <div className="grid w-full items-center gap-4">
+            <CardContent className="p-3">
+              <div className="grid w-full items-center gap-3">
                 <div className="flex flex-col space-y-1.5">
-                  <Label htmlFor="newPassword">New Password</Label>
+                  <Label htmlFor="newPassword" className="text-sm">New Password</Label>
                   <Input
                     id="newPassword"
                     type="password"
-                    placeholder="Enter new password"
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
                     required
-                    autoComplete="new-password"
+                    className="text-sm"
                   />
                 </div>
                 <div className="flex flex-col space-y-1.5">
-                  <Label htmlFor="confirmPassword">Confirm Password</Label>
+                  <Label htmlFor="confirmPassword" className="text-sm">Confirm Password</Label>
                   <Input
                     id="confirmPassword"
                     type="password"
-                    placeholder="Confirm new password"
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     required
-                    autoComplete="new-password"
+                    className="text-sm"
                   />
                 </div>
               </div>
             </CardContent>
-            <CardFooter className="flex flex-col gap-4">
-              <div className="flex gap-2 w-full">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setStep('code')}
-                  className="flex-1"
-                >
-                  Back
-                </Button>
-                <Button type="submit" className="flex-1" disabled={loading}>
-                  {loading ? 'Resetting...' : 'Reset Password'}
-                </Button>
-              </div>
+            <CardFooter className="p-3 flex flex-col gap-3">
+              <Button type="submit" className="w-full text-sm" disabled={loading}>
+                {loading ? 'Resetting Password...' : 'Reset Password'}
+              </Button>
             </CardFooter>
           </form>
         )}
 
         {step === 'success' && (
-          <CardContent className="flex flex-col items-center gap-4">
-            <CheckCircle2 className="h-12 w-12 text-green-500" />
-            <p className="text-center text-muted-foreground">
-              Your password has been successfully reset. You can now log in with your new password.
-            </p>
-            <Button onClick={() => navigate('/login')} className="w-full">
-              Return to Login
+          <CardFooter className="p-3 flex flex-col gap-3">
+            <Button onClick={() => navigate('/login')} className="w-full text-sm">
+              Back to Login
             </Button>
-          </CardContent>
+          </CardFooter>
         )}
       </Card>
     </div>

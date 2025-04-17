@@ -26,16 +26,16 @@ export function Login() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+    <div className="container mx-auto p-4 h-full flex items-center justify-center">
       <Card className="w-full max-w-md">
-        <CardHeader>
-          <CardTitle>Welcome back</CardTitle>
-          <CardDescription>Enter your credentials to login</CardDescription>
+        <CardHeader className="p-3">
+          <CardTitle className="text-base">Welcome back</CardTitle>
+          <CardDescription className="text-xs">Enter your credentials to login</CardDescription>
         </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
+        <CardContent className="p-3">
+          <form onSubmit={handleSubmit} className="space-y-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="email" className="text-sm">Email</Label>
               <Input
                 id="email"
                 type="email"
@@ -43,12 +43,13 @@ export function Login() {
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="john@example.com"
                 required
+                className="text-sm"
               />
             </div>
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               <div className="flex items-center justify-between">
-                <Label htmlFor="password">Password</Label>
-                <Link to="/forgot-password" className="text-sm text-blue-600 hover:underline">
+                <Label htmlFor="password" className="text-sm">Password</Label>
+                <Link to="/forgot-password" className="text-xs text-blue-600 hover:underline">
                   Forgot password?
                 </Link>
               </div>
@@ -59,16 +60,17 @@ export function Login() {
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
                 required
+                className="text-sm"
               />
             </div>
-            {error && <p className="text-red-500 text-sm">{error}</p>}
-            <Button type="submit" className="w-full">
+            {error && <p className="text-xs text-red-500">{error}</p>}
+            <Button type="submit" className="w-full text-sm">
               Login
             </Button>
           </form>
         </CardContent>
-        <CardFooter className="flex justify-center">
-          <p className="text-sm text-gray-600">
+        <CardFooter className="p-3 flex justify-center">
+          <p className="text-xs text-gray-600">
             Don't have an account?{' '}
             <Link to="/register" className="text-blue-600 hover:underline">
               Register

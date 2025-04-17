@@ -155,6 +155,10 @@ export async function courtsRoutes(app: FastifyInstance) {
   }, async (request, reply) => {
     try {
       const { date } = request.query as { date?: string }
+      const selectedDate = date ? new Date(date) : new Date()
+      selectedDate.setHours(0, 0, 0, 0)
+
+      // Get all active courts
       const courts = await prisma.court.findMany({
         where: {
           status: 'ACTIVE'
@@ -163,22 +167,63 @@ export async function courtsRoutes(app: FastifyInstance) {
           bookings: {
             where: {
               startTime: {
-                gte: date ? new Date(date) : new Date()
+                gte: selectedDate,
+                lt: new Date(selectedDate.getTime() + 24 * 60 * 60 * 1000)
               },
-              endTime: {
-                lte: date ? new Date(date) : new Date()
-              }
+              status: 'confirmed'
             }
           }
         }
       })
-      return reply.send(courts.map(court => ({
-        ...court,
-        id: Number(court.id),
-        surface: court.surface,
-        type: court.type,
-        status: court.status,
-      })))
+
+      // Generate time slots for the day (7:00 to 22:00, 30-minute intervals)
+      interface TimeSlot {
+        startTime: string;
+        endTime: string;
+      }
+      
+      const timeSlots: TimeSlot[] = []
+      for (let hour = 7; hour < 22; hour++) {
+        for (let minute = 0; minute < 60; minute += 30) {
+          timeSlots.push({
+            startTime: `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`,
+            endTime: `${(hour + (minute + 30 >= 60 ? 1 : 0)).toString().padStart(2, '0')}:${((minute + 30) % 60).toString().padStart(2, '0')}`,
+          })
+        }
+      }
+
+      // Map courts with their available slots
+      const courtsWithSlots = courts.map(court => {
+        const bookedSlots = new Set(
+          court.bookings.map(booking => 
+            `${booking.startTime.getHours().toString().padStart(2, '0')}:${booking.startTime.getMinutes().toString().padStart(2, '0')}`
+          )
+        )
+
+        const availableSlots = timeSlots.map(slot => {
+          const isBooked = bookedSlots.has(slot.startTime)
+          const hour = parseInt(slot.startTime.split(':')[0])
+          const isPeak = hour >= 17 && hour < 20
+          
+          return {
+            startTime: slot.startTime,
+            endTime: slot.endTime,
+            isBooked,
+            price: isPeak ? 30 : 20, // Example pricing: $30 for peak hours, $20 for off-peak
+          }
+        })
+
+        return {
+          ...court,
+          id: Number(court.id),
+          surface: court.surface,
+          type: court.type,
+          status: court.status,
+          availableSlots,
+        }
+      })
+
+      return reply.send(courtsWithSlots)
     } catch (error) {
       console.error('Error fetching court availability:', error)
       return reply.status(500).send({ error: 'Failed to fetch court availability' })

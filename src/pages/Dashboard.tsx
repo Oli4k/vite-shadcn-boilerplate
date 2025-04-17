@@ -1,4 +1,4 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Calendar, Users, CreditCard, Activity, Clock, TrendingUp, Plus, BookOpen, UserPlus } from "lucide-react";
 import { useNavigate } from "react-router-dom";
@@ -132,25 +132,6 @@ export function Dashboard() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <div>
-          <h2 className="text-3xl font-bold tracking-tight">Dashboard</h2>
-          <p className="text-muted-foreground">
-            Welcome back, {user?.name || "User"}
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button onClick={() => navigate("/bookings/new")}>
-            <Plus className="mr-2 h-4 w-4" />
-            New Booking
-          </Button>
-          <Button variant="outline" onClick={() => navigate("/members/create")}>
-            <UserPlus className="mr-2 h-4 w-4" />
-            Add Member
-          </Button>
-        </div>
-      </div>
-
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         {stats.map((stat) => (
           <Card key={stat.title}>
@@ -171,30 +152,23 @@ export function Dashboard() {
         ))}
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
-        <Card className="col-span-4">
+      <div className="grid gap-4 md:grid-cols-2">
+        <Card>
           <CardHeader>
-            <CardTitle>Upcoming Bookings</CardTitle>
+            <CardTitle className="text-base">Upcoming Bookings</CardTitle>
+            <CardDescription className="text-xs">Today's scheduled court bookings</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
               {upcomingBookings.map((booking) => (
-                <div
-                  key={booking.id}
-                  className="flex items-center justify-between p-4 border rounded-lg"
-                >
+                <div key={booking.id} className="flex items-center justify-between">
                   <div className="space-y-1">
-                    <p className="font-medium">{booking.court}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {booking.member}
-                    </p>
+                    <p className="text-sm font-medium">{booking.court}</p>
+                    <p className="text-xs text-muted-foreground">{booking.member}</p>
                   </div>
-                  <div className="text-right">
-                    <p className="font-medium">{booking.time}</p>
-                    <Badge
-                      className={getStatusColor(booking.status)}
-                      variant="secondary"
-                    >
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground">{booking.time}</span>
+                    <Badge variant="outline" className={getStatusColor(booking.status)}>
                       {booking.status}
                     </Badge>
                   </div>
@@ -204,33 +178,23 @@ export function Dashboard() {
           </CardContent>
         </Card>
 
-        <Card className="col-span-3">
+        <Card>
           <CardHeader>
-            <CardTitle>Recent Activity</CardTitle>
+            <CardTitle className="text-base">Recent Activity</CardTitle>
+            <CardDescription className="text-xs">Latest member actions and updates</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
               {recentActivity.map((activity) => (
-                <div
-                  key={activity.id}
-                  className="flex items-start space-x-4"
-                >
-                  <div className="mt-1">
-                    {getActivityIcon(activity.type)}
+                <div key={activity.id} className="flex items-center gap-2">
+                  {getActivityIcon(activity.type)}
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium">{activity.member}</p>
+                    <p className="text-xs text-muted-foreground">{activity.action}</p>
                   </div>
-                  <div className="flex-1 space-y-1">
-                    <p className="text-sm font-medium leading-none">
-                      {activity.member}
-                    </p>
-                    <p className="text-sm text-muted-foreground">
-                      {activity.action}
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-sm font-medium">{activity.time}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {activity.date}
-                    </p>
+                  <div className="ml-auto text-right">
+                    <p className="text-xs text-muted-foreground">{activity.time}</p>
+                    <p className="text-xs text-muted-foreground">{activity.date}</p>
                   </div>
                 </div>
               ))}

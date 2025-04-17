@@ -2,7 +2,6 @@ import { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { toast } from 'sonner'
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form'
@@ -53,42 +52,43 @@ export default function ForgotPassword() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+    <div className="container mx-auto p-4 h-full flex items-center justify-center">
       <Card className="w-full max-w-md">
-        <CardHeader>
-          <CardTitle>Reset your password</CardTitle>
-          <CardDescription>
+        <CardHeader className="p-3">
+          <CardTitle className="text-base">Reset your password</CardTitle>
+          <CardDescription className="text-xs">
             Enter your email address and we'll send you a code to reset your password
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-3">
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-3">
               <FormField
                 control={form.control}
                 name="email"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Email</FormLabel>
+                    <FormLabel className="text-sm">Email</FormLabel>
                     <FormControl>
                       <Input
                         placeholder="john@example.com"
                         {...field}
                         autoComplete="email"
+                        className="text-sm"
                       />
                     </FormControl>
-                    <FormMessage />
+                    <FormMessage className="text-xs" />
                   </FormItem>
                 )}
               />
-              <Button type="submit" className="w-full" disabled={loading}>
+              <Button type="submit" className="w-full text-sm" disabled={loading}>
                 {loading ? 'Sending Code...' : 'Send Reset Code'}
               </Button>
             </form>
           </Form>
         </CardContent>
-        <CardFooter className="flex justify-center">
-          <p className="text-sm text-gray-600">
+        <CardFooter className="p-3 flex justify-center">
+          <p className="text-xs text-gray-600">
             Remember your password?{' '}
             <Link to="/login" className="text-blue-600 hover:underline">
               Back to login

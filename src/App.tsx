@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { Toaster } from 'sonner'
-import { AuthProvider } from '@/contexts/auth-context'
+import { AuthProvider, useAuth } from '@/contexts/auth-context'
+import { BookingProvider } from '@/contexts/booking-context'
 import { ProtectedRoute } from '@/components/protected-route'
 import { MainLayout } from '@/components/layout/MainLayout'
 import { Login } from '@/pages/Login'
@@ -13,10 +14,9 @@ import Members from '@/pages/Members'
 import MemberDetails from '@/pages/MemberDetails'
 import { CreateMember } from '@/pages/CreateMember'
 import EditMember from '@/pages/EditMember'
-import MemberBookings from './pages/MemberBookings'
+import MemberBookings from '@/pages/MemberBookings'
 import { Packages } from '@/pages/Packages'
 import AcceptInvitation from '@/pages/AcceptInvitation'
-import { useAuth } from '@/contexts/auth-context'
 
 function RootRedirect() {
   const { isAuthenticated } = useAuth()
@@ -99,7 +99,9 @@ export function App() {
           element={
             <ProtectedRoute>
               <MainLayout>
-                <MemberBookings />
+                <BookingProvider>
+                  <MemberBookings />
+                </BookingProvider>
               </MainLayout>
             </ProtectedRoute>
           }

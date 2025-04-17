@@ -6,6 +6,7 @@ import { Plus } from 'lucide-react'
 import { CourtForm } from '@/components/courts/CourtForm'
 import { CourtList } from '@/components/courts/CourtList'
 import { useToast } from '@/hooks/use-toast'
+import { usePageHeader } from '@/contexts/page-header-context'
 
 export function Courts() {
   const [courts, setCourts] = useState<Court[]>([])
@@ -14,6 +15,18 @@ export function Courts() {
   const [isFormOpen, setIsFormOpen] = useState(false)
   const [editingCourt, setEditingCourt] = useState<Court | null>(null)
   const { toast } = useToast()
+  const { setActions } = usePageHeader()
+
+  useEffect(() => {
+    setActions(
+      <Button onClick={() => setIsFormOpen(true)}>
+        <Plus className="w-4 h-4 mr-2" />
+        Add Court
+      </Button>
+    )
+
+    return () => setActions(null)
+  }, [setActions])
 
   const fetchCourts = async () => {
     try {
@@ -106,14 +119,6 @@ export function Courts() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold">Courts</h1>
-        <Button onClick={() => setIsFormOpen(true)}>
-          <Plus className="w-4 h-4 mr-2" />
-          Add Court
-        </Button>
-      </div>
-
       <CourtList
         courts={courts}
         onEdit={setEditingCourt}

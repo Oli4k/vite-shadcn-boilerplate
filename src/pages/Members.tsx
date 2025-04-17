@@ -2,13 +2,13 @@ import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { useAuth } from '@/contexts/auth-context'
 import { useToast } from '@/hooks/use-toast'
-import { ArrowUpDown } from 'lucide-react'
+import { ArrowUpDown, Plus } from 'lucide-react'
 
 interface Member {
   id: string
@@ -137,115 +137,122 @@ export default function Members() {
   }
 
   return (
-    <div className="container mx-auto py-6">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold">Members</h1>
+    <div className="space-y-4">
+      <div className="flex justify-end">
         {user?.role === 'ADMIN' && (
-          <Button asChild>
-            <Link to="/members/create">Add New Member</Link>
+          <Button asChild size="sm">
+            <Link to="/members/create">
+              <Plus className="mr-2 h-4 w-4" />
+              Add New Member
+            </Link>
           </Button>
         )}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-        <div className="col-span-1 md:col-span-2">
-          <Input
-            placeholder="Search by name or email..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
-        </div>
-        <div className="grid grid-cols-2 gap-4">
-          <Select value={membershipFilter} onValueChange={setMembershipFilter}>
-            <SelectTrigger>
-              <SelectValue placeholder="Membership Type" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Types</SelectItem>
-              <SelectItem value="REGULAR">Regular</SelectItem>
-              <SelectItem value="PREMIUM">Premium</SelectItem>
-              <SelectItem value="VIP">VIP</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger>
-              <SelectValue placeholder="Status" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Statuses</SelectItem>
-              <SelectItem value="ACTIVE">Active</SelectItem>
-              <SelectItem value="INACTIVE">Inactive</SelectItem>
-              <SelectItem value="SUSPENDED">Suspended</SelectItem>
-              <SelectItem value="PENDING">Pending</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
+      <Card>
+        <CardContent className="pt-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+            <div className="col-span-1 md:col-span-2">
+              <Input
+                placeholder="Search by name or email..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="h-9"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <Select value={membershipFilter} onValueChange={setMembershipFilter}>
+                <SelectTrigger className="h-9">
+                  <SelectValue placeholder="Membership Type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Types</SelectItem>
+                  <SelectItem value="REGULAR">Regular</SelectItem>
+                  <SelectItem value="PREMIUM">Premium</SelectItem>
+                  <SelectItem value="VIP">VIP</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="h-9">
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Statuses</SelectItem>
+                  <SelectItem value="ACTIVE">Active</SelectItem>
+                  <SelectItem value="INACTIVE">Inactive</SelectItem>
+                  <SelectItem value="SUSPENDED">Suspended</SelectItem>
+                  <SelectItem value="PENDING">Pending</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
 
-      <div className="rounded-md border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>
-                <Button variant="ghost" onClick={() => handleSort('name')} className="p-0">
-                  Name
-                  <ArrowUpDown className="ml-2 h-4 w-4" />
-                </Button>
-              </TableHead>
-              <TableHead>
-                <Button variant="ghost" onClick={() => handleSort('email')} className="p-0">
-                  Email
-                  <ArrowUpDown className="ml-2 h-4 w-4" />
-                </Button>
-              </TableHead>
-              <TableHead>
-                <Button variant="ghost" onClick={() => handleSort('membershipType')} className="p-0">
-                  Membership Type
-                  <ArrowUpDown className="ml-2 h-4 w-4" />
-                </Button>
-              </TableHead>
-              <TableHead>
-                <Button variant="ghost" onClick={() => handleSort('status')} className="p-0">
-                  Status
-                  <ArrowUpDown className="ml-2 h-4 w-4" />
-                </Button>
-              </TableHead>
-              <TableHead>Managed By</TableHead>
-              <TableHead>Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {sortedAndFilteredMembers.map((member) => (
-              <TableRow key={member.id} className="group">
-                <TableCell>{member.name}</TableCell>
-                <TableCell>{member.email}</TableCell>
-                <TableCell>
-                  <Badge className={getMembershipTypeColor(member.membershipType)}>
-                    {member.membershipType}
-                  </Badge>
-                </TableCell>
-                <TableCell>
-                  <Badge className={getStatusColor(member.status)}>
-                    {member.status}
-                  </Badge>
-                </TableCell>
-                <TableCell>{member.managedBy?.name || '-'}</TableCell>
-                <TableCell>
-                  <Button asChild size="sm" variant="ghost" className="hover:bg-primary hover:text-primary-foreground">
-                    <Link to={`/members/${member.id}`}>View Details</Link>
-                  </Button>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
+          <div className="rounded-md border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>
+                    <Button variant="ghost" onClick={() => handleSort('name')} className="p-0">
+                      Name
+                      <ArrowUpDown className="ml-2 h-4 w-4" />
+                    </Button>
+                  </TableHead>
+                  <TableHead>
+                    <Button variant="ghost" onClick={() => handleSort('email')} className="p-0">
+                      Email
+                      <ArrowUpDown className="ml-2 h-4 w-4" />
+                    </Button>
+                  </TableHead>
+                  <TableHead>
+                    <Button variant="ghost" onClick={() => handleSort('membershipType')} className="p-0">
+                      Membership Type
+                      <ArrowUpDown className="ml-2 h-4 w-4" />
+                    </Button>
+                  </TableHead>
+                  <TableHead>
+                    <Button variant="ghost" onClick={() => handleSort('status')} className="p-0">
+                      Status
+                      <ArrowUpDown className="ml-2 h-4 w-4" />
+                    </Button>
+                  </TableHead>
+                  <TableHead>Managed By</TableHead>
+                  <TableHead>Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {sortedAndFilteredMembers.map((member) => (
+                  <TableRow key={member.id} className="group">
+                    <TableCell>{member.name}</TableCell>
+                    <TableCell>{member.email}</TableCell>
+                    <TableCell>
+                      <Badge className={getMembershipTypeColor(member.membershipType)}>
+                        {member.membershipType}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Badge className={getStatusColor(member.status)}>
+                        {member.status}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>{member.managedBy?.name || '-'}</TableCell>
+                    <TableCell>
+                      <Button asChild size="sm" variant="ghost" className="hover:bg-primary hover:text-primary-foreground">
+                        <Link to={`/members/${member.id}`}>View Details</Link>
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
 
-      {sortedAndFilteredMembers.length === 0 && (
-        <div className="text-center py-10 text-gray-500">
-          No members found matching your criteria
-        </div>
-      )}
+          {sortedAndFilteredMembers.length === 0 && (
+            <div className="text-center py-10 text-sm text-muted-foreground">
+              No members found matching your criteria
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   )
 } 

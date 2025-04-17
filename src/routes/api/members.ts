@@ -6,6 +6,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { prisma } from '../../lib/prisma'
 import { MembershipType, MemberStatus } from '@prisma/client'
 import crypto from 'crypto'
+import { authMiddleware } from '../../middleware/auth'
 
 interface CreateMemberBody {
   name: string
@@ -33,11 +34,13 @@ interface RouteParams {
 
 export async function membersRoutes(app: FastifyInstance) {
   // Get all members
-  app.get('/members', async (request, reply) => {
+  app.get('/members', {
+    preHandler: [authMiddleware],
+  }, async (_request, reply) => {
     try {
       const members = await prisma.member.findMany({
-        include: {
-          user: true,
+        orderBy: {
+          name: 'asc',
         },
       })
       return reply.send(members)
@@ -47,14 +50,55 @@ export async function membersRoutes(app: FastifyInstance) {
     }
   })
 
-  // Get member by ID
-  app.get<{ Params: { id: string } }>('/members/:id', async (request, reply) => {
+  // Search members
+  app.get('/members/search', {
+    preHandler: [authMiddleware],
+  }, async (request, reply) => {
     try {
-      const member = await prisma.member.findUnique({
-        where: { id: request.params.id },
-        include: {
-          user: true,
+      const { query } = request.query as { query: string }
+      
+      if (!query || query.length < 2) {
+        return reply.send([])
+      }
+
+      const members = await prisma.member.findMany({
+        where: {
+          OR: [
+            {
+              name: {
+                contains: query,
+                mode: 'insensitive',
+              },
+            },
+            {
+              email: {
+                contains: query,
+                mode: 'insensitive',
+              },
+            },
+          ],
         },
+        take: 10,
+        orderBy: {
+          name: 'asc',
+        },
+      })
+
+      return reply.send(members)
+    } catch (error) {
+      console.error('Error searching members:', error)
+      return reply.status(500).send({ error: 'Failed to search members' })
+    }
+  })
+
+  // Get member by ID
+  app.get('/members/:id', {
+    preHandler: [authMiddleware],
+  }, async (request, reply) => {
+    try {
+      const { id } = request.params as { id: string }
+      const member = await prisma.member.findUnique({
+        where: { id },
       })
       if (!member) {
         return reply.status(404).send({ error: 'Member not found' })
@@ -67,7 +111,9 @@ export async function membersRoutes(app: FastifyInstance) {
   })
 
   // Create member
-  app.post<{ Body: CreateMemberBody }>('/members', async (request, reply) => {
+  app.post<{ Body: CreateMemberBody }>('/members', {
+    preHandler: [authMiddleware],
+  }, async (request, reply) => {
     try {
       const { name, email, phone, address, membershipType, status, notes } = request.body
       const member = await prisma.member.create({
@@ -96,7 +142,9 @@ export async function membersRoutes(app: FastifyInstance) {
   })
 
   // Update member
-  app.put<{ Params: { id: string }; Body: UpdateMemberBody }>('/members/:id', async (request, reply) => {
+  app.put<{ Params: { id: string }; Body: UpdateMemberBody }>('/members/:id', {
+    preHandler: [authMiddleware],
+  }, async (request, reply) => {
     try {
       const { name, email, phone, address, membershipType, status, notes } = request.body
       const member = await prisma.member.update({
@@ -122,7 +170,9 @@ export async function membersRoutes(app: FastifyInstance) {
   })
 
   // Delete member
-  app.delete<{ Params: { id: string } }>('/members/:id', async (request, reply) => {
+  app.delete<{ Params: { id: string } }>('/members/:id', {
+    preHandler: [authMiddleware],
+  }, async (request, reply) => {
     try {
       await prisma.member.delete({
         where: { id: request.params.id },
