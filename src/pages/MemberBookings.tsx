@@ -3,7 +3,8 @@ import { useBooking } from "@/contexts/booking-context";
 import { DateSelector } from "@/components/booking/DateSelector";
 import { TimelineView } from "@/components/booking/TimelineView";
 import { BookingDialog } from "@/components/booking/BookingDialog";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { BookingFilters } from "@/components/booking/BookingFilters";
+import { Card, CardContent } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertCircle } from "lucide-react";
 
@@ -30,50 +31,51 @@ export default function MemberBookings() {
     handleSlotClick,
     selectedBooking,
     setSelectedBooking,
-    handleBookingComplete
+    handleBookingComplete,
+    surfaceTypes,
+    selectedSurfaces,
+    onSurfaceChange,
+    amenities,
+    onAmenityChange
   } = useBooking();
 
   return (
     <div className="space-y-4">
       <div className="grid gap-4 md:grid-cols-[300px_1fr]">
         <div className="space-y-4">
-          <Card>
-            <CardHeader className="p-3">
-              <CardTitle className="text-base">Select Date</CardTitle>
-              <CardDescription className="text-xs">Choose a date for your booking</CardDescription>
-            </CardHeader>
-            <CardContent className="p-3">
+          <Card className="h-fit">
+            <CardContent className="p-4">
               <DateSelector
                 selectedDate={selectedDate}
                 onDateChange={setSelectedDate}
               />
             </CardContent>
           </Card>
+
+          <BookingFilters
+            surfaceTypes={surfaceTypes}
+            selectedSurfaces={selectedSurfaces}
+            onSurfaceChange={onSurfaceChange}
+            amenities={amenities}
+            onAmenityChange={onAmenityChange}
+          />
         </div>
 
-        <Card>
-          <CardHeader className="p-3">
-            <CardTitle className="text-base">Available Courts</CardTitle>
-            <CardDescription className="text-xs">View and select available courts for the selected date</CardDescription>
-          </CardHeader>
-          <CardContent className="p-3">
-            {error ? (
-              <Alert variant="destructive">
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            ) : (
-              <div className="w-full overflow-hidden">
-                <TimelineView
-                  courts={courts}
-                  onSlotClick={handleSlotClick}
-                  isLoading={isLoading}
-                  timeSlots={TIME_SLOTS}
-                />
-              </div>
-            )}
-          </CardContent>
-        </Card>
+        {error ? (
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        ) : (
+          <div className="w-full">
+            <TimelineView
+              courts={courts}
+              onSlotClick={handleSlotClick}
+              isLoading={isLoading}
+              timeSlots={TIME_SLOTS}
+            />
+          </div>
+        )}
       </div>
 
       <BookingDialog

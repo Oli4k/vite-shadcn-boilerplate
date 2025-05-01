@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Label } from '@/components/ui/label'
 import { toast } from 'sonner'
 import { useAuth } from '@/contexts/auth-context'
+import apiClient from '@/lib/api'
 
 export function RegisterForm() {
   const [email, setEmail] = useState('')
@@ -13,31 +14,16 @@ export function RegisterForm() {
   const [name, setName] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const navigate = useNavigate()
-  const { login } = useAuth()
+  const { checkAuth } = useAuth()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
 
     try {
-      const response = await fetch('/api/register', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ email, password, name }),
-      })
-
-      const data = await response.json()
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Registration failed')
-      }
-
-      login(data.token, data.user)
-      
+      await apiClient.post('/api/auth/register', { email, password, name })
+      await checkAuth()
       toast.success('Your account has been created successfully')
-
       navigate('/')
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Registration failed')

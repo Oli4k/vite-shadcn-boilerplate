@@ -1,0 +1,10 @@
+# Ignore all .env files by default
+
+# But don't ignore .env.example specifically
+!.env.example
+!.example
+!.example*
+!env.example
+!example
+!example*
+!.env.*

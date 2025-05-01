@@ -3,7 +3,9 @@ import { format } from 'date-fns'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import * as z from 'zod'
-import { User, Mail, Plus, X } from 'lucide-react'
+import { User, Check, X, UserPlus } from 'lucide-react'
+import { useAuth } from '@/contexts/auth-context'
+import apiClient from '@/lib/api'
 
 import {
   Dialog,
@@ -39,26 +41,36 @@ import {
   CommandItem,
   CommandList,
 } from '@/components/ui/command'
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card'
 import { useToast } from '@/hooks/use-toast'
-import { api } from '@/lib/api'
+
+const formSchema = z.object({
+  gameType: z.enum(["single", "double"]),
+  participants: z.array(z.object({
+    id: z.string().optional(),
+    name: z.string().min(2, "Name must be at least 2 characters"),
+    email: z.string().email().optional(),
+    isMember: z.boolean(),
+    memberId: z.string().optional(),
+  }))
+  .min(1, "At least one participant is required")
+  .max(4, "Maximum 4 participants allowed"),
+  memberSearch: z.string().optional(),
+})
+
+type FormValues = z.infer<typeof formSchema>
 
 interface Member {
   id: string
   name: string
   email: string
 }
-
-const bookingFormSchema = z.object({
-  participants: z.array(z.object({
-    id: z.string().optional(),
-    name: z.string(),
-    email: z.string().email().optional(),
-    isMember: z.boolean(),
-  })).min(1, "At least one participant is required").max(4, "Maximum 4 participants allowed"),
-  participantType: z.enum(["single", "double"]),
-})
-
-type BookingFormValues = z.infer<typeof bookingFormSchema>
 
 interface BookingDialogProps {
   open: boolean
@@ -84,374 +96,267 @@ export function BookingDialog({
   onBookingComplete,
 }: BookingDialogProps) {
   const { toast } = useToast()
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [searchQuery, setSearchQuery] = useState('')
+  const { user } = useAuth()
   const [members, setMembers] = useState<Member[]>([])
   const [isSearching, setIsSearching] = useState(false)
-  const [newEmail, setNewEmail] = useState('')
-  const [showEmailInput, setShowEmailInput] = useState(false)
-  const [showResults, setShowResults] = useState(false)
-  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
-
-  const form = useForm<BookingFormValues>({
-    resolver: zodResolver(bookingFormSchema),
+  const [guestName, setGuestName] = useState("")
+  const [searchResults, setSearchResults] = useState<Member[]>([])
+  const [isLoading, setIsLoading] = useState(false)
+  const [selectedMember, setSelectedMember] = useState<Member | null>(null)
+  
+  const form = useForm<FormValues>({
+    resolver: zodResolver(formSchema),
     defaultValues: {
+      gameType: "single",
       participants: [],
-      participantType: "single",
+      memberSearch: "",
     },
   })
 
-  // Track form changes
-  useEffect(() => {
-    const subscription = form.watch((value) => {
-      setHasUnsavedChanges(true)
-    })
-    return () => subscription.unsubscribe()
-  }, [form])
+  const { participants, gameType } = form.watch()
 
-  // Handle dialog close with unsaved changes
-  const handleOpenChange = (open: boolean) => {
-    if (!open && hasUnsavedChanges) {
-      if (window.confirm('You have unsaved changes. Are you sure you want to close the form?')) {
-        onOpenChange(false)
-        setHasUnsavedChanges(false)
-      }
-    } else {
-      onOpenChange(open)
+  useEffect(() => {
+    if (open && user && participants.length === 0) {
+      form.setValue('participants', [{
+        id: user.id,
+        name: user.name || user.email,
+        email: user.email,
+        isMember: true,
+        memberId: user.memberId,
+      }])
+    }
+  }, [open, user, form, participants.length])
+
+  const searchMembers = async (searchQuery: string) => {
+    setIsSearching(true)
+    try {
+      const response = await apiClient.get('/api/members/search', {
+        params: { query: searchQuery }
+      })
+      setSearchResults(response.data.filter((m: Member) => !participants.map(p => p.memberId).includes(m.id)))
+    } catch (error) {
+      console.error('Error searching members:', error)
+      setSearchResults([])
+    } finally {
+      setIsSearching(false)
     }
   }
 
-  useEffect(() => {
-    const searchMembers = async () => {
-      if (searchQuery.length < 2) {
-        setMembers([])
-        setShowResults(false)
-        return
-      }
+  const handleBooking = async () => {
+    if (!selectedMember || !startTime || !date || !courtId) return
 
-      setIsSearching(true)
-      setShowResults(true)
-      
-      try {
-        const response = await api.get('/members/search', {
-          params: { query: searchQuery }
-        })
-        setMembers(response.data)
-      } catch (error) {
-        console.error('Failed to search members:', error)
-        toast({
-          title: 'Error',
-          description: 'Failed to search members. Please try again.',
-          variant: 'destructive',
-        })
-      } finally {
-        setIsSearching(false)
-      }
-    }
-
-    const debounceTimer = setTimeout(searchMembers, 300)
-    return () => clearTimeout(debounceTimer)
-  }, [searchQuery, toast])
-
-  const onSubmit = async (data: BookingFormValues) => {
+    setIsLoading(true)
     try {
-      setIsSubmitting(true)
-      await api.post('/bookings', {
+      const bookingDate = format(date, 'yyyy-MM-dd')
+      await apiClient.post('/api/bookings', {
         courtId,
-        startTime,
-        endTime,
-        date: format(date, 'yyyy-MM-dd'),
-        participants: data.participants,
-        participantType: data.participantType,
+        startTime: `${bookingDate}T${startTime}`,
+        endTime: `${bookingDate}T${endTime}`,
+        type: gameType,
+        participants: [
+          ...participants,
+          {
+            id: selectedMember.id,
+            name: selectedMember.name,
+            email: selectedMember.email,
+            isMember: true,
+            memberId: selectedMember.id,
+          }
+        ]
       })
-      
-      toast({
-        title: 'Booking Confirmed',
-        description: `Your booking for ${courtName} has been confirmed.`,
-      })
-      
       onBookingComplete()
       onOpenChange(false)
     } catch (error) {
+      console.error('Error creating booking:', error)
       toast({
         title: 'Error',
-        description: 'Failed to create booking. Please try again.',
+        description: 'Failed to create booking',
         variant: 'destructive',
       })
     } finally {
-      setIsSubmitting(false)
+      setIsLoading(false)
     }
   }
-
-  const addParticipant = (participant: { id?: string; name: string; email?: string; isMember: boolean }) => {
-    const currentParticipants = form.getValues('participants')
-    if (currentParticipants.length >= 4) {
-      toast({
-        title: 'Maximum participants reached',
-        description: 'You can only add up to 4 participants.',
-        variant: 'destructive',
-      })
-      return
-    }
-
-    form.setValue('participants', [...currentParticipants, {
-      ...participant,
-      isMember: Boolean(participant.id)
-    }])
-    
-    // Switch to doubles if 3 or more participants
-    if (currentParticipants.length >= 2) {
-      form.setValue('participantType', 'double')
-    }
-
-    setSearchQuery('')
-    setNewEmail('')
-    setShowEmailInput(false)
-  }
-
-  const removeParticipant = (index: number) => {
-    const currentParticipants = form.getValues('participants')
-    form.setValue('participants', currentParticipants.filter((_, i) => i !== index))
-    
-    // Switch back to singles if less than 3 participants
-    if (currentParticipants.length <= 2) {
-      form.setValue('participantType', 'single')
-    }
-  }
-
-  const handleEmailSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    if (newEmail.trim()) {
-      addParticipant({
-        name: newEmail.split('@')[0],
-        email: newEmail.trim(),
-        isMember: false,
-      })
-      setNewEmail('')
-    }
-  }
-
-  const isFormValid = form.getValues('participants').length > 0
-
-  // Debug form state
-  useEffect(() => {
-    console.log('Form state:', {
-      isValid: form.formState.isValid,
-      errors: form.formState.errors,
-      values: form.getValues(),
-      participants: form.getValues('participants'),
-      participantType: form.getValues('participantType')
-    })
-  }, [form.formState, form.getValues()])
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-[425px]">
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
         <DialogHeader>
-          <DialogTitle>Confirm Booking</DialogTitle>
+          <DialogTitle>Book {courtName}</DialogTitle>
           <DialogDescription>
-            Review your booking details and add participants.
+            {format(date, 'EEEE, MMMM d, yyyy')} • {startTime} - {endTime}
           </DialogDescription>
         </DialogHeader>
-        
-        <div className="grid gap-4 py-4">
-          <div className="space-y-2">
-            <h4 className="font-medium">Booking Details</h4>
-            <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
-              <div className="text-muted-foreground">Court:</div>
-              <div className="font-medium text-right">{courtName}</div>
-              <div className="text-muted-foreground">Date:</div>
-              <div className="font-medium text-right">{format(date, 'PPP')}</div>
-              <div className="text-muted-foreground">Time:</div>
-              <div className="font-medium text-right">{startTime} - {endTime}</div>
-              <div className="text-muted-foreground">Price:</div>
-              <div className="font-medium text-right">${price}</div>
-            </div>
-          </div>
 
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-              <FormField
-                control={form.control}
-                name="participantType"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Game Type</FormLabel>
-                    <Select
-                      onValueChange={field.onChange}
-                      value={field.value}
-                      disabled={form.getValues('participants').length >= 3}
-                    >
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select game type" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="single">Singles</SelectItem>
-                        <SelectItem value="double">Doubles</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(handleBooking)} className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Game Type</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <FormField
+                  control={form.control}
+                  name="gameType"
+                  render={({ field }) => (
+                    <FormItem>
+                      <Select
+                        value={field.value}
+                        onValueChange={(value: "single" | "double") => {
+                          field.onChange(value)
+                          if (value === "single" && participants.length > 2) {
+                            form.setValue('participants', [participants[0]])
+                          }
+                        }}
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="single">Singles</SelectItem>
+                          <SelectItem value="double">Doubles</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </CardContent>
+            </Card>
 
-              <FormField
-                control={form.control}
-                name="participants"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Participants</FormLabel>
-                    <div className="space-y-4">
-                      <div className="space-y-4">
-                        <div className="space-y-2">
-                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                            <User className="h-4 w-4" />
-                            <span>Add Club Member</span>
-                          </div>
-                          <div className="relative">
-                            <div className="rounded-lg border">
-                              <Input
-                                placeholder="Search members by name or email..."
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                                className="h-9 border-none shadow-none"
-                              />
-                              {showResults && (
-                                <div className="absolute top-[2.25rem] w-full rounded-md border bg-popover shadow-md">
-                                  {isSearching ? (
-                                    <div className="p-2 text-sm text-muted-foreground">Searching...</div>
-                                  ) : members.length === 0 ? (
-                                    <div className="p-2 text-sm text-muted-foreground">No members found.</div>
-                                  ) : (
-                                    <div className="py-1">
-                                      <div className="px-2 py-1.5 text-xs text-muted-foreground">Members</div>
-                                      {members.map((member) => (
-                                        <button
-                                          key={member.id}
-                                          onClick={() => {
-                                            addParticipant({
-                                              id: member.id,
-                                              name: member.name,
-                                              email: member.email,
-                                              isMember: true,
-                                            })
-                                            setSearchQuery('')
-                                            setShowResults(false)
-                                          }}
-                                          className="flex w-full items-center gap-2 px-2 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground"
-                                        >
-                                          <User className="h-4 w-4" />
-                                          <div className="flex flex-col">
-                                            <span className="font-medium">{member.name}</span>
-                                            <span className="text-xs text-muted-foreground">{member.email}</span>
-                                          </div>
-                                        </button>
-                                      ))}
-                                    </div>
-                                  )}
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="space-y-2">
-                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                            <Mail className="h-4 w-4" />
-                            <span>Invite Guest Player</span>
-                          </div>
-                          <div className="flex gap-2">
-                            <div className="flex-1 space-y-1">
-                              <Input
-                                type="email"
-                                placeholder="Enter guest's email address"
-                                value={newEmail}
-                                onChange={(e) => setNewEmail(e.target.value)}
-                                className="h-9"
-                              />
-                              <p className="text-xs text-muted-foreground">
-                                The guest will receive a confirmation email with booking details
-                              </p>
-                            </div>
-                            <Button
-                              type="button"
-                              size="sm"
-                              className="h-9"
-                              disabled={!newEmail.trim()}
-                              onClick={handleEmailSubmit}
-                            >
-                              <Plus className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </div>
-
-                        <div className="space-y-2">
-                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                            <span>Selected Participants</span>
-                            <Badge variant="outline" className="ml-auto">
-                              {form.getValues('participants').length}/4
-                            </Badge>
-                          </div>
-                          <div className="space-y-2">
-                            {field.value.map((participant, index) => (
-                              <div
-                                key={index}
-                                className="flex items-center justify-between rounded-md border p-2"
-                              >
-                                <div className="flex items-center gap-2">
-                                  {participant.isMember ? (
-                                    <User className="h-4 w-4 text-muted-foreground" />
-                                  ) : (
-                                    <Mail className="h-4 w-4 text-muted-foreground" />
-                                  )}
-                                  <div>
-                                    <p className="text-sm font-medium">{participant.name}</p>
-                                    {participant.email && (
-                                      <p className="text-xs text-muted-foreground">{participant.email}</p>
-                                    )}
-                                  </div>
-                                </div>
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-4 w-4 hover:bg-transparent"
-                                  onClick={() => removeParticipant(index)}
-                                >
-                                  <X className="h-3 w-3" />
-                                </Button>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
+            <Card>
+              <CardHeader>
+                <CardTitle>Participants</CardTitle>
+                <CardDescription>
+                  {gameType === 'single' ? 'Add up to 2 players' : 'Add up to 4 players'}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {participants.map((participant, index) => (
+                  <div key={index} className="flex items-center justify-between p-4 rounded-lg border">
+                    <div className="flex items-center gap-3">
+                      <User className="h-5 w-5 text-muted-foreground" />
+                      <div>
+                        <p className="font-medium">{participant.name}</p>
+                        {participant.email && (
+                          <p className="text-sm text-muted-foreground">{participant.email}</p>
+                        )}
                       </div>
+                      <Badge variant={participant.isMember ? "default" : "secondary"}>
+                        {participant.isMember ? "Member" : "Guest"}
+                      </Badge>
                     </div>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+                    {index !== 0 && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          form.setValue(
+                            'participants',
+                            participants.filter((_, i) => i !== index)
+                          )
+                        }}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
+                ))}
 
-              <DialogFooter>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => handleOpenChange(false)}
-                  disabled={isSubmitting}
-                >
-                  Cancel
-                </Button>
-                <Button 
-                  type="submit" 
-                  disabled={!isFormValid || isSubmitting}
-                >
-                  {isSubmitting ? 'Confirming...' : 'Confirm Booking'}
-                </Button>
-              </DialogFooter>
-            </form>
-          </Form>
-        </div>
+                {((gameType === 'single' && participants.length < 2) ||
+                  (gameType === 'double' && participants.length < 4)) && (
+                  <div className="space-y-4">
+                    <FormField
+                      control={form.control}
+                      name="memberSearch"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Add Member</FormLabel>
+                          <Command className="rounded-md border">
+                            <CommandInput
+                              placeholder="Search members..."
+                              value={field.value}
+                              onValueChange={field.onChange}
+                            />
+                            <CommandList>
+                              <CommandEmpty>
+                                {isSearching ? "Searching..." : "No members found"}
+                              </CommandEmpty>
+                              <CommandGroup>
+                                {searchResults.map((member) => (
+                                  <CommandItem
+                                    key={member.id}
+                                    onSelect={() => {
+                                      form.setValue('participants', [
+                                        ...participants,
+                                        {
+                                          id: member.id,
+                                          name: member.name,
+                                          email: member.email,
+                                          isMember: true,
+                                          memberId: member.id,
+                                        }
+                                      ])
+                                      field.onChange("")
+                                      setSelectedMember(member)
+                                    }}
+                                  >
+                                    {member.name}
+                                  </CommandItem>
+                                ))}
+                              </CommandGroup>
+                            </CommandList>
+                          </Command>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <div className="flex gap-2">
+                      <Input
+                        placeholder="Enter guest name"
+                        value={guestName}
+                        onChange={(e) => setGuestName(e.target.value)}
+                      />
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={() => {
+                          if (guestName.trim()) {
+                            form.setValue('participants', [
+                              ...participants,
+                              {
+                                name: guestName.trim(),
+                                isMember: false,
+                              }
+                            ])
+                            setGuestName("")
+                          }
+                        }}
+                        disabled={!guestName}
+                      >
+                        <UserPlus className="mr-2 h-4 w-4" />
+                        Add Guest
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={!selectedMember || isLoading}>
+                {isLoading ? "Booking..." : "Book Court"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </Form>
       </DialogContent>
     </Dialog>
   )

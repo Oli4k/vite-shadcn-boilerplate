@@ -166,12 +166,12 @@ export default function MemberDetails() {
   return (
     <div className="space-y-4">
       <div className="flex justify-end gap-2">
-        <Button variant="outline" size="sm" onClick={() => navigate(-1)}>
-          Back
-        </Button>
-        <Button size="sm" onClick={() => navigate(`/members/${member.id}/edit`)}>
-          Edit Member
-        </Button>
+          <Button variant="outline" size="sm" onClick={() => navigate(-1)}>
+            Back
+          </Button>
+          <Button size="sm" onClick={() => navigate(`/members/${member.id}/edit`)}>
+            Edit Member
+          </Button>
       </div>
 
       <Card>

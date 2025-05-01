@@ -1,11 +1,13 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { toast } from 'sonner'
 
 interface User {
   id: string
   email: string
   name: string | null
   role: 'ADMIN' | 'STAFF' | 'MEMBER'
+  memberId?: string
 }
 
 interface AuthContextType {
@@ -27,11 +29,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const checkAuth = async () => {
     try {
+      console.log('Checking authentication status...')
       const response = await fetch('/api/auth/me', {
         credentials: 'include',
       })
-      if (response.ok) {
-        const data = await response.json()
+      
+      console.log('Auth check response:', response.status)
+      if (!response.ok) {
+        console.error('Auth check failed:', response.status)
+        setUser(null)
+        return
+      }
+      
+      const data = await response.json()
+      console.log('Auth check data:', data)
+      
+      if (data.user) {
         setUser(data.user)
       } else {
         setUser(null)
@@ -59,16 +72,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         body: JSON.stringify({ email, password }),
       })
 
-      const data = await response.json()
-
       if (!response.ok) {
+        const data = await response.json()
         throw new Error(data.error || 'Login failed')
       }
 
-      await checkAuth()
+      await checkAuth() // Check auth status after login
+      toast.success('Successfully logged in')
       navigate('/')
     } catch (error) {
       console.error('Login error:', error)
+      toast.error(error instanceof Error ? error.message : 'Login failed')
       throw error
     }
   }
@@ -82,16 +96,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         body: JSON.stringify({ email, password, name }),
       })
 
+      const data = await response.json()
+
       if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.error || 'Registration failed')
+        throw new Error(data.error || 'Registration failed')
       }
 
-      // After successful registration, check auth status
       await checkAuth()
-      navigate('/dashboard')
+      toast.success('Registration successful')
+      navigate('/')
     } catch (error) {
       console.error('Registration error:', error)
+      toast.error(error instanceof Error ? error.message : 'Registration failed')
       throw error
     }
   }
@@ -103,9 +119,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         credentials: 'include',
       })
       setUser(null)
+      toast.success('Successfully logged out')
       navigate('/login')
     } catch (error) {
       console.error('Logout error:', error)
+      toast.error('Failed to logout')
     }
   }
 

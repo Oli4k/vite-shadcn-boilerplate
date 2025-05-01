@@ -26,7 +26,6 @@ export async function courtsRoutes(app: FastifyInstance) {
       })
       return reply.send(courts.map(court => ({
         ...court,
-        id: Number(court.id),
         surface: court.surface,
         type: court.type,
         status: court.status,
@@ -54,7 +53,6 @@ export async function courtsRoutes(app: FastifyInstance) {
       }
       return reply.send({
         ...court,
-        id: Number(court.id),
         surface: court.surface,
         type: court.type,
         status: court.status,
@@ -85,7 +83,6 @@ export async function courtsRoutes(app: FastifyInstance) {
       })
       return reply.status(201).send({
         ...court,
-        id: Number(court.id),
         surface: court.surface,
         type: court.type,
         status: court.status,
@@ -119,7 +116,6 @@ export async function courtsRoutes(app: FastifyInstance) {
       })
       return reply.send({
         ...court,
-        id: Number(court.id),
         surface: court.surface,
         type: court.type,
         status: court.status,
@@ -215,7 +211,6 @@ export async function courtsRoutes(app: FastifyInstance) {
 
         return {
           ...court,
-          id: Number(court.id),
           surface: court.surface,
           type: court.type,
           status: court.status,

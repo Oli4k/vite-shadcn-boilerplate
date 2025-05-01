@@ -30,6 +30,14 @@ const pageTitles: Record<string, { title: string; description: string }> = {
     title: "Packages",
     description: "Manage membership and booking packages",
   },
+  "/news": {
+    title: "Club News",
+    description: "Latest updates and announcements",
+  },
+  "/admin/news": {
+    title: "Manage News",
+    description: "Create and manage club news articles",
+  },
 };
 
 export function MainLayout({ children }: MainLayoutProps) {
@@ -54,15 +62,15 @@ export function MainLayout({ children }: MainLayoutProps) {
           <div className="w-64 border-r bg-background">
             <Sidebar />
           </div>
-          <main className="flex-1 overflow-auto p-6">
-            <PageHeader
-              title={currentPage.title}
-              description={currentPage.description}
-            />
+        <main className="flex-1 overflow-auto p-6">
+          <PageHeader
+            title={currentPage.title}
+            description={currentPage.description}
+          />
             {children}
-          </main>
-        </div>
+        </main>
       </div>
+    </div>
     </PageHeaderProvider>
   );
 } 

@@ -4,6 +4,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { useAuth } from '@/contexts/auth-context'
+import apiClient from '@/lib/api'
 
 export default function AcceptInvitation() {
   const [searchParams] = useSearchParams()
@@ -13,6 +15,7 @@ export default function AcceptInvitation() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const navigate = useNavigate()
+  const { checkAuth } = useAuth()
 
   useEffect(() => {
     if (!token) {
@@ -32,25 +35,8 @@ export default function AcceptInvitation() {
     }
 
     try {
-      const response = await fetch(`/api/members/accept-invitation`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ token, password }),
-      })
-
-      if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.message || 'Failed to accept invitation')
-      }
-
-      const data = await response.json()
-      
-      // Store the access token
-      localStorage.setItem('accessToken', data.accessToken)
-      
-      // Navigate to the dashboard
+      await apiClient.post('/api/members/accept-invitation', { token, password })
+      await checkAuth()
       navigate('/')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred')

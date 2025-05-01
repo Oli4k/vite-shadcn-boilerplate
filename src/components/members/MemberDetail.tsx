@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useToast } from '@/components/ui/use-toast'
-import { api } from '@/lib/api'
+import apiClient from '@/lib/api'
 
 interface MemberDetailProps {
   member: {
@@ -19,8 +19,10 @@ export function MemberDetail({ member }: MemberDetailProps) {
   const { toast } = useToast()
 
   const handleVerifyEmail = async () => {
+    if (!verificationCode) return
+
     try {
-      await api.post(`/members/${member.id}/verify-email`, { code: verificationCode })
+      await apiClient.post(`/api/members/${member.id}/verify-email`, { code: verificationCode })
       toast({
         title: 'Success',
         description: 'Email verified successfully',
@@ -28,7 +30,7 @@ export function MemberDetail({ member }: MemberDetailProps) {
     } catch (error) {
       toast({
         title: 'Error',
-        description: 'Invalid verification code',
+        description: 'Failed to verify email',
         variant: 'destructive',
       })
     }
@@ -36,7 +38,7 @@ export function MemberDetail({ member }: MemberDetailProps) {
 
   const handleSendInvite = async () => {
     try {
-      await api.post(`/members/${member.id}/send-invite`)
+      await apiClient.post(`/api/members/${member.id}/send-invite`, {})
       toast({
         title: 'Success',
         description: 'Invitation sent successfully',

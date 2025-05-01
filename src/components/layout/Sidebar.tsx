@@ -6,14 +6,32 @@ import {
   Users,
   Calendar,
   Package,
+  Settings,
+  Shield,
+  Newspaper
 } from "lucide-react";
 
-const navigation = [
+// Common navigation items accessible to all users
+const commonNavigation = [
   {
     name: "Dashboard",
     href: "/dashboard",
     icon: LayoutDashboard,
   },
+  {
+    name: "Bookings",
+    href: "/bookings",
+    icon: Calendar,
+  },
+  {
+    name: "Club News",
+    href: "/news",
+    icon: Newspaper,
+  },
+];
+
+// Admin-only navigation items
+const adminNavigation = [
   {
     name: "Courts",
     href: "/courts",
@@ -25,24 +43,28 @@ const navigation = [
     icon: Users,
   },
   {
-    name: "Bookings",
-    href: "/bookings",
-    icon: Calendar,
-  },
-  {
     name: "Packages",
     href: "/packages",
     icon: Package,
+  },
+  {
+    name: "Manage News",
+    href: "/admin/news",
+    icon: Newspaper,
+  },
+  {
+    name: "Settings",
+    href: "/settings",
+    icon: Settings,
   },
 ];
 
 export function Sidebar() {
   const location = useLocation();
+  // TODO: Replace with actual auth check
+  const isAdmin = true; // Temporary, should come from auth context
 
-  return (
-    <div className="flex h-full flex-col">
-      <nav className="flex-1 space-y-1 p-4 pt-4">
-        {navigation.map((item) => {
+  const NavLink = ({ item }: { item: typeof commonNavigation[0] }) => {
           const isActive = location.pathname === item.href;
           return (
             <Link
@@ -59,7 +81,37 @@ export function Sidebar() {
               {item.name}
             </Link>
           );
-        })}
+  };
+
+  return (
+    <div className="flex h-full flex-col">
+      <nav className="flex-1 space-y-1 p-4">
+        <div className="space-y-1">
+          {commonNavigation.map((item) => (
+            <NavLink key={item.name} item={item} />
+          ))}
+        </div>
+
+        {isAdmin && (
+          <>
+            <div className="relative my-6">
+              <div className="absolute inset-0 flex items-center">
+                <span className="w-full border-t" />
+              </div>
+              <div className="relative flex justify-center text-xs uppercase">
+                <span className="bg-background px-2 text-muted-foreground">
+                  Admin
+                </span>
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              {adminNavigation.map((item) => (
+                <NavLink key={item.name} item={item} />
+              ))}
+            </div>
+          </>
+        )}
       </nav>
     </div>
   );

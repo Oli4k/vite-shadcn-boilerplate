@@ -17,6 +17,8 @@ import EditMember from '@/pages/EditMember'
 import MemberBookings from '@/pages/MemberBookings'
 import { Packages } from '@/pages/Packages'
 import AcceptInvitation from '@/pages/AcceptInvitation'
+import News from '@/pages/News'
+import AdminNews from '@/pages/AdminNews'
 
 function RootRedirect() {
   const { isAuthenticated } = useAuth()
@@ -112,6 +114,24 @@ export function App() {
             <ProtectedRoute>
               <MainLayout>
                 <Packages />
+              </MainLayout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/news"
+          element={
+            <MainLayout>
+              <News />
+            </MainLayout>
+          }
+        />
+        <Route
+          path="/admin/news"
+          element={
+            <ProtectedRoute>
+              <MainLayout>
+                <AdminNews />
               </MainLayout>
             </ProtectedRoute>
           }

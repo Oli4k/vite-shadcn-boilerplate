@@ -77,6 +77,9 @@ export async function membersRoutes(app: FastifyInstance) {
               },
             },
           ],
+          user: {
+            isNot: null
+          }
         },
         take: 10,
         orderBy: {

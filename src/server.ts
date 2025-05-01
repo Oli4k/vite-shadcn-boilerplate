@@ -1,5 +1,5 @@
 import Fastify, { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify'
-import cors from '@fastify/cors'
+import cors, { FastifyCorsOptions } from '@fastify/cors'
 import { PrismaClient, $Enums } from '@prisma/client'
 import bcrypt from 'bcrypt'
 import cookie from '@fastify/cookie'
@@ -9,28 +9,75 @@ import { v4 as uuidv4 } from 'uuid'
 import { sendInvite, sendPasswordResetEmail } from './services/email'
 import { courtsRoutes } from './routes/api/courts'
 import { membersRoutes } from './routes/api/members'
+import { newsRoutes } from './routes/api/news'
+import { bookingsRoutes } from './routes/api/bookings'
+import { authRoutes } from './routes/api/auth'
 import { registerAuthMiddleware } from './middleware/auth'
+import { config } from './config'
 
 const prisma = new PrismaClient()
-const app = Fastify()
+const app = Fastify({
+  logger: true // Enable logging to help debug issues
+})
 
 // Register plugins
 app.register(cors, {
-  origin: 'http://localhost:5173',
+  origin: (origin: string | undefined, cb: (err: Error | null, allow: boolean) => void) => {
+    // Allow all origins in development
+    if (process.env.NODE_ENV === 'development') {
+      cb(null, true)
+      return
+    }
+
+    // In production, check against allowed origins
+    const allowedOrigins = [
+      config.FRONTEND_URL,
+      'http://localhost:5173',
+      'https://localhost:5173',
+      'http://127.0.0.1:5173',
+      'https://127.0.0.1:5173',
+      /^https?:\/\/192\.168\.\d{1,3}\.\d{1,3}:5173$/  // Allow HTTP/HTTPS local network IPs
+    ]
+    
+    if (!origin) {
+      cb(null, true)
+      return
+    }
+
+    // Check against exact matches and patterns
+    const isAllowed = allowedOrigins.some(allowed => 
+      typeof allowed === 'string' 
+        ? allowed === origin
+        : allowed.test(origin)
+    )
+
+    if (isAllowed) {
+      cb(null, true)
+      return
+    }
+
+    cb(new Error('Not allowed by CORS'), false)
+  },
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
-})
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Cookie'],
+  exposedHeaders: ['Set-Cookie'],
+  maxAge: 86400, // 24 hours
+} as FastifyCorsOptions)
 
 app.register(cookie, {
   secret: process.env.COOKIE_SECRET || 'your-cookie-secret-key',
   hook: 'onRequest',
   parseOptions: {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
-    path: '/'
+    secure: false, // Allow non-HTTPS in development
+    sameSite: 'lax',  // More permissive SameSite setting
+    path: '/',
   }
+})
+
+app.register(jwtPlugin, {
+  secret: process.env.JWT_SECRET || 'your-jwt-secret-key'
 })
 
 app.register(rateLimit, {
@@ -38,130 +85,77 @@ app.register(rateLimit, {
   timeWindow: '1 minute'
 })
 
-// Register JWT plugin
-app.register(jwtPlugin, {
-  secret: process.env.JWT_SECRET || 'your-super-secret-key-that-is-at-least-32-characters-long',
-  cookie: {
-    cookieName: 'accessToken',
-    signed: false
-  },
-  sign: {
-    expiresIn: '1d'
-  },
-  verify: {
-    extractToken: (request) => {
-      return request.cookies.accessToken
-    }
-  }
-})
+// Register auth middleware
+registerAuthMiddleware(app)
 
-// Auth routes
-app.post('/api/auth/register', async (request: FastifyRequest<{ Body: { email: string; password: string; name?: string } }>, reply: FastifyReply) => {
+// Register routes
+app.register(authRoutes, { prefix: '/api' })
+app.register(courtsRoutes, { prefix: '/api' })
+app.register(membersRoutes, { prefix: '/api' })
+app.register(newsRoutes, { prefix: '/api' })
+app.register(bookingsRoutes, { prefix: '/api' })
+
+// In development, proxy non-API requests to Vite dev server
+if (process.env.NODE_ENV === 'development') {
+  app.register(import('@fastify/http-proxy'), {
+    upstream: 'http://localhost:5173',
+    prefix: '/',
+    rewritePrefix: '/',
+    websocket: true,
+    preHandler: (request: FastifyRequest, reply: FastifyReply, done: () => void) => {
+      // Skip proxying for API routes
+      if (request.url.startsWith('/api/')) {
+        reply.callNotFound()
+        return
+      }
+      done()
+    }
+  })
+}
+
+// Migration endpoint to create member profiles for existing users
+app.post('/api/migrate/create-member-profiles', async (request: FastifyRequest, reply: FastifyReply) => {
   try {
-    const { email, password, name = '' } = request.body
-    const hashedPassword = await bcrypt.hash(password, 10)
-    
-    const user = await prisma.user.create({
-      data: {
-        email,
-        password: hashedPassword,
-        name,
-        role: $Enums.UserRole.MEMBER
+    // Find all users without member profiles
+    const usersWithoutMembers = await prisma.user.findMany({
+      where: {
+        memberProfile: null,
+        role: 'MEMBER'
       }
     })
 
-    const token = await reply.jwtSign({ userId: user.id, role: user.role })
-    reply.setCookie('accessToken', token, { 
-      httpOnly: true, 
-      secure: process.env.NODE_ENV === 'production', 
-      sameSite: 'lax',
-      path: '/',
-      maxAge: 60 * 60 * 24 // 1 day
-    })
-    
-    return { user: { id: user.id, email: user.email, name: user.name, role: user.role } }
+    // Create member profiles for each user
+    const createdMembers = await Promise.all(
+      usersWithoutMembers.map(user =>
+        prisma.member.create({
+          data: {
+            name: user.name || user.email.split('@')[0],
+            email: user.email,
+            status: 'ACTIVE',
+            membershipType: 'REGULAR',
+            user: {
+              connect: {
+                id: user.id
+              }
+            }
+          }
+        })
+      )
+    )
+
+    return {
+      success: true,
+      message: `Created ${createdMembers.length} member profiles`,
+      members: createdMembers
+    }
   } catch (error) {
-    reply.status(500).send({ error: 'Failed to register user' })
+    console.error('Migration error:', error)
+    return reply.status(500).send({
+      success: false,
+      error: 'Failed to create member profiles'
+    })
   }
 })
-
-app.post('/api/auth/login', async (request: FastifyRequest<{ Body: { email: string; password: string } }>, reply: FastifyReply) => {
-  try {
-    const { email, password } = request.body
-    console.log('Login attempt for email:', email)
-    
-    const user = await prisma.user.findUnique({ where: { email } })
-    console.log('User found:', user ? 'yes' : 'no')
-    
-    if (!user) {
-      console.log('User not found')
-      return reply.status(401).send({ error: 'Invalid credentials' })
-    }
-
-    const passwordMatch = await bcrypt.compare(password, user.password)
-    console.log('Password match:', passwordMatch)
-    
-    if (!passwordMatch) {
-      console.log('Password does not match')
-      return reply.status(401).send({ error: 'Invalid credentials' })
-    }
-
-    const token = await reply.jwtSign({ userId: user.id, role: user.role })
-    reply.setCookie('accessToken', token, { 
-      httpOnly: true, 
-      secure: process.env.NODE_ENV === 'production', 
-      sameSite: 'lax',
-      path: '/',
-      maxAge: 60 * 60 * 24 // 1 day
-    })
-    
-    return { user: { id: user.id, email: user.email, name: user.name, role: user.role } }
-  } catch (error) {
-    console.error('Login error:', error)
-    reply.status(500).send({ error: 'Failed to login' })
-  }
-})
-
-app.post('/api/auth/logout', async (request: FastifyRequest, reply: FastifyReply) => {
-  reply.clearCookie('accessToken', { 
-    path: '/',
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax'
-  })
-  return { message: 'Logged out successfully' }
-})
-
-// Add the /auth/me endpoint before auth middleware
-app.get('/api/auth/me', async (request: FastifyRequest, reply: FastifyReply) => {
-  try {
-    // If there's no user set by the middleware, return null
-    if (!request.user) {
-      return { user: null }
-    }
-
-    const user = await prisma.user.findUnique({
-      where: { id: request.user.userId },
-      select: { id: true, email: true, name: true, role: true }
-    })
-
-    if (!user) {
-      return { user: null }
-    }
-
-    return { user }
-  } catch (error) {
-    console.error('Error in /api/auth/me:', error)
-    return { user: null }
-  }
-})
-
-// Register routes before auth middleware
-app.register(courtsRoutes, { prefix: '/api' })
-app.register(membersRoutes, { prefix: '/api' })
-
-// Register auth middleware
-registerAuthMiddleware(app)
 
 // Password reset endpoints
 app.post('/api/auth/forgot-password', async (request: FastifyRequest<{ Body: { email: string } }>, reply: FastifyReply) => {
@@ -325,10 +319,23 @@ app.post('/api/auth/reset-password', async (request: FastifyRequest<{ Body: { to
 // Start server
 const start = async () => {
   try {
-    await app.listen({ port: 3000 })
-    console.log('Server is running on port 3000')
+    console.log('Starting server with config:', {
+      port: config.PORT,
+      frontendUrl: config.FRONTEND_URL,
+      nodeEnv: config.NODE_ENV
+    })
+    
+    await app.listen({ port: config.PORT, host: '0.0.0.0' })
+    console.log(`Server running at http://localhost:${config.PORT}`)
   } catch (err) {
-    app.log.error(err)
+    console.error('Error starting server:', err)
+    if (err instanceof Error) {
+      console.error('Error details:', {
+        message: err.message,
+        stack: err.stack,
+        name: err.name
+      })
+    }
     process.exit(1)
   }
 }

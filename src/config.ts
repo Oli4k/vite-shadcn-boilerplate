@@ -15,12 +15,17 @@ const envSchema = z.object({
   APP_NAME: z.string().default('Tennis Club Management'),
 })
 
-export const config = {
-  APP_NAME: process.env.APP_NAME || 'My App',
-  APP_URL: process.env.APP_URL || 'http://localhost:3000',
+export const config = envSchema.parse({
+  NODE_ENV: process.env.NODE_ENV,
+  PORT: process.env.PORT,
+  DATABASE_URL: process.env.DATABASE_URL,
+  JWT_SECRET: process.env.JWT_SECRET,
+  REFRESH_TOKEN_SECRET: process.env.REFRESH_TOKEN_SECRET,
+  FRONTEND_URL: process.env.FRONTEND_URL,
   SMTP_HOST: process.env.SMTP_HOST || 'smtp.example.com',
-  SMTP_PORT: parseInt(process.env.SMTP_PORT || '587', 10),
+  SMTP_PORT: process.env.SMTP_PORT || '587',
   SMTP_USER: process.env.SMTP_USER || '',
   SMTP_PASS: process.env.SMTP_PASS || '',
   SMTP_FROM: process.env.SMTP_FROM || 'noreply@example.com',
-} 
+  APP_NAME: process.env.APP_NAME || 'Tennis Club Management',
+}) 

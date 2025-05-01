@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react'
+import apiClient from './api'
 
 interface User {
   id: string
@@ -21,37 +22,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
-    const token = localStorage.getItem('token')
-    if (token) {
-      fetchUserData(token)
-    } else {
-      setIsLoading(false)
-    }
+    fetchUserData()
   }, [])
 
-  const fetchUserData = async (token: string) => {
+  const fetchUserData = async () => {
     try {
-      const response = await fetch('/api/me', {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      })
-
-      if (!response.ok) {
-        if (response.status === 401) {
-          // Token is invalid or expired
-          localStorage.removeItem('token')
-          setUser(null)
-        } else {
-          throw new Error('Failed to fetch user data')
-        }
-      } else {
-        const data = await response.json()
-        setUser(data.user)
-      }
+      const { user } = await apiClient.get('/api/auth/me')
+      setUser(user)
     } catch (error) {
       console.error('Error fetching user data:', error)
-      localStorage.removeItem('token')
       setUser(null)
     } finally {
       setIsLoading(false)
@@ -59,12 +38,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   const login = (token: string, userData: User) => {
-    localStorage.setItem('token', token)
     setUser(userData)
   }
 
   const logout = () => {
-    localStorage.removeItem('token')
     setUser(null)
   }
 

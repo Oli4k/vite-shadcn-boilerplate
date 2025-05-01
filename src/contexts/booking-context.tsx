@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react'
 import { format } from 'date-fns'
-import { api } from '@/lib/api'
+import apiClient from '@/lib/api'
 import { useToast } from '@/hooks/use-toast'
 
 interface Court {
@@ -14,6 +14,12 @@ interface Court {
     price?: number
     bookedBy?: string
   }>
+}
+
+interface Amenities {
+  lighting?: boolean
+  covered?: boolean
+  indoor?: boolean
 }
 
 interface BookingContextType {
@@ -32,9 +38,22 @@ interface BookingContextType {
   setSelectedBooking: (booking: any) => void
   handleSlotClick: (courtId: string, slot: { startTime: string; endTime: string }) => void
   handleBookingComplete: () => void
+  surfaceTypes: string[]
+  selectedSurfaces: string[]
+  onSurfaceChange: (surface: string) => void
+  amenities: Amenities
+  onAmenityChange: (amenity: keyof Amenities) => void
 }
 
 const BookingContext = createContext<BookingContextType | undefined>(undefined)
+
+// Helper function to format enum values
+const formatEnumValue = (value: string) => {
+  return value
+    .split('_')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(' ')
+}
 
 export function BookingProvider({ children }: { children: ReactNode }) {
   const { toast } = useToast()
@@ -50,11 +69,19 @@ export function BookingProvider({ children }: { children: ReactNode }) {
     price: number
   } | null>(null)
 
+  const [surfaceTypes, setSurfaceTypes] = useState<string[]>([])
+  const [selectedSurfaces, setSelectedSurfaces] = useState<string[]>([])
+  const [amenities, setAmenities] = useState<Amenities>({
+    lighting: false,
+    covered: false,
+    indoor: false
+  })
+
   const fetchCourts = useCallback(async () => {
     setIsLoading(true)
     setError(null)
     try {
-      const response = await api.get('/courts/availability', {
+      const response = await apiClient.get('/api/courts/availability', {
         params: {
           date: format(selectedDate, 'yyyy-MM-dd'),
         },
@@ -63,7 +90,7 @@ export function BookingProvider({ children }: { children: ReactNode }) {
       const courtsData = response.data.map((court: any, index: number) => ({
         id: court.id || `court-${index}-${Date.now()}`,
         name: court.name || 'Unknown Court',
-        surface: court.surface || 'Unknown Surface',
+        surface: formatEnumValue(court.surface || 'Unknown Surface'),
         availableSlots: Array.isArray(court.availableSlots) 
           ? court.availableSlots.map((slot: any) => ({
               startTime: slot.startTime || '',
@@ -74,6 +101,15 @@ export function BookingProvider({ children }: { children: ReactNode }) {
             }))
           : [],
       }))
+
+      // Update surface types (keep them formatted)
+      const uniqueSurfaces = Array.from(new Set(courtsData.map((court: Court) => court.surface))) as string[]
+      setSurfaceTypes(uniqueSurfaces)
+      
+      // If no surfaces are selected, select all by default
+      if (selectedSurfaces.length === 0) {
+        setSelectedSurfaces(uniqueSurfaces)
+      }
 
       setCourts(courtsData)
     } catch (error) {
@@ -87,7 +123,7 @@ export function BookingProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsLoading(false)
     }
-  }, [selectedDate, toast])
+  }, [selectedDate, toast, selectedSurfaces.length])
 
   const handleSlotClick = (courtId: string, slot: { startTime: string; endTime: string }) => {
     const court = courts.find(c => c.id === courtId)
@@ -109,23 +145,50 @@ export function BookingProvider({ children }: { children: ReactNode }) {
     fetchCourts()
   }
 
-  // Fetch courts when selectedDate changes
+  const onSurfaceChange = (surface: string) => {
+    setSelectedSurfaces(prev => 
+      prev.includes(surface)
+        ? prev.filter(s => s !== surface)
+        : [...prev, surface]
+    )
+  }
+
+  const onAmenityChange = (amenity: keyof Amenities) => {
+    setAmenities(prev => ({
+      ...prev,
+      [amenity]: !prev[amenity]
+    }))
+  }
+
   useEffect(() => {
     fetchCourts()
   }, [fetchCourts])
+
+  const filteredCourts = courts.filter(court => {
+    if (!selectedSurfaces.includes(court.surface)) {
+      return false
+    }
+
+    return true
+  })
 
   return (
     <BookingContext.Provider
       value={{
         selectedDate,
         setSelectedDate,
-        courts,
+        courts: filteredCourts,
         isLoading,
         error,
         selectedBooking,
         setSelectedBooking,
         handleSlotClick,
         handleBookingComplete,
+        surfaceTypes,
+        selectedSurfaces,
+        onSurfaceChange,
+        amenities,
+        onAmenityChange,
       }}
     >
       {children}

@@ -61,6 +61,7 @@ model User {
   managedMembers Member[]     @relation("MemberManager")
   memberProfile Member?       @relation("UserMember")
   resetTokens   PasswordResetToken[]
+  news          News[]
 }
 
 model Member {
@@ -81,6 +82,7 @@ model Member {
   payments        Payment[]
   invitationToken String?       @unique
   bookings        Booking[]
+  participatedBookings BookingParticipant[]
 }
 
 model Payment {
@@ -127,8 +129,26 @@ model Booking {
   startTime   DateTime
   endTime     DateTime
   status      String    @default("confirmed") // "confirmed", "cancelled", "completed"
+  type        String    @default("single") // "single", "double"
+  participants BookingParticipant[]
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
+}
+
+model BookingParticipant {
+  id        String   @id @default(cuid())
+  bookingId String
+  booking   Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  name      String
+  email     String?
+  isMember  Boolean  @default(false)
+  memberId  String?  // Optional reference to a Member
+  member    Member?  @relation(fields: [memberId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([bookingId])
+  @@index([memberId])
 }
 
 model PasswordResetToken {
@@ -143,4 +163,17 @@ model PasswordResetToken {
 
   @@index([token])
   @@index([userId])
+}
+
+model News {
+  id          String    @id @default(cuid())
+  title       String
+  content     String
+  published   Boolean   @default(false)
+  author      User      @relation(fields: [authorId], references: [id])
+  authorId    String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([authorId])
 }

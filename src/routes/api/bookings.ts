@@ -1,106 +1,195 @@
-import { NextResponse } from 'next/server'
-import { verifyToken } from '@/lib/auth'
+import { FastifyInstance } from 'fastify'
+import { z } from 'zod'
+import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
-import { format, parse } from 'date-fns'
+import { authMiddleware } from '@/middleware/auth'
 
-export async function POST(req: Request) {
-  try {
-    // Get the authorization header
-    const authHeader = req.headers.get('authorization')
-    if (!authHeader?.startsWith('Bearer ')) {
-      return NextResponse.json(
-        { message: 'Unauthorized' },
-        { status: 401 }
-      )
-    }
+interface ParamsWithId {
+  id: string
+}
 
-    // Verify the token
-    const token = authHeader.split(' ')[1]
-    const decoded = verifyToken(token)
-    if (!decoded) {
-      return NextResponse.json(
-        { message: 'Invalid token' },
-        { status: 401 }
-      )
-    }
+interface CreateBookingParticipant {
+  email: string
+  name: string
+  isMember: boolean
+  memberId?: string
+}
 
-    const body = await req.json()
-    const { courtId, startTime, endTime, date, participants, participantType } = body
+interface CreateBookingBody {
+  courtId: string
+  memberId: string
+  startTime: string
+  endTime: string
+  type: string
+  participants: CreateBookingParticipant[]
+}
 
-    // Validate required fields
-    if (!courtId || !startTime || !endTime || !date || !participants || !participantType) {
-      return NextResponse.json(
-        { message: 'Missing required fields' },
-        { status: 400 }
-      )
-    }
-
-    // Parse dates
-    const bookingDate = parse(date, 'yyyy-MM-dd', new Date())
-    const startDateTime = new Date(`${date}T${startTime}`)
-    const endDateTime = new Date(`${date}T${endTime}`)
-
-    // Check if the court exists and is available
-    const court = await prisma.court.findUnique({
-      where: { id: courtId },
+type BookingWithRelations = Prisma.BookingGetPayload<{
+  include: {
+    court: true
+    member: true
+    participants: {
       include: {
-        bookings: {
-          where: {
-            startTime: {
-              lte: endDateTime,
-            },
-            endTime: {
-              gte: startDateTime,
-            },
-            status: 'confirmed',
+        member: true
+      }
+    }
+  }
+}>
+
+export async function bookingsRoutes(app: FastifyInstance) {
+  // Get all bookings
+  app.get('/bookings', {
+    preHandler: [authMiddleware],
+  }, async (request, reply) => {
+    try {
+      const bookings = await prisma.booking.findMany({
+        include: {
+          court: true,
+          member: true,
+          participants: {
+            include: {
+              member: true
+            }
           },
         },
-      },
-    })
-
-    if (!court) {
-      return NextResponse.json(
-        { message: 'Court not found' },
-        { status: 404 }
-      )
+      })
+      return reply.send(bookings)
+    } catch (error) {
+      console.error('Error fetching bookings:', error)
+      return reply.status(500).send({ error: 'Failed to fetch bookings' })
     }
+  })
 
-    if (court.bookings.length > 0) {
-      return NextResponse.json(
-        { message: 'Court is already booked for this time slot' },
-        { status: 409 }
-      )
+  // Create booking
+  app.post<{ Body: CreateBookingBody }>('/bookings', {
+    preHandler: [authMiddleware],
+  }, async (request, reply) => {
+    try {
+      const { courtId, memberId, startTime, endTime, type, participants } = request.body
+
+      const booking = await prisma.booking.create({
+        data: {
+          courtId,
+          memberId,
+          startTime: new Date(startTime),
+          endTime: new Date(endTime),
+          type,
+          participants: {
+            create: participants.map(participant => ({
+              name: participant.name,
+              email: participant.email,
+              isMember: participant.isMember,
+              memberId: participant.isMember ? participant.memberId : null,
+            })),
+          },
+        },
+        include: {
+          court: true,
+          member: true,
+          participants: {
+            include: {
+              member: true
+            }
+          },
+        },
+      })
+
+      return reply.status(201).send(booking)
+    } catch (error) {
+      console.error('Error creating booking:', error)
+      return reply.status(500).send({ error: 'Failed to create booking' })
     }
+  })
 
-    // Get the member making the booking
-    const member = await prisma.member.findUnique({
-      where: { userId: decoded.userId },
-    })
+  // Get booking by ID
+  app.get<{ Params: ParamsWithId }>('/bookings/:id', {
+    preHandler: [authMiddleware],
+  }, async (request, reply) => {
+    try {
+      const booking = await prisma.booking.findUnique({
+        where: { id: request.params.id },
+        include: {
+          court: true,
+          member: true,
+          participants: {
+            include: {
+              member: true
+            }
+          },
+        },
+      })
 
-    if (!member) {
-      return NextResponse.json(
-        { message: 'Member not found' },
-        { status: 404 }
-      )
+      if (!booking) {
+        return reply.status(404).send({ error: 'Booking not found' })
+      }
+
+      return reply.send(booking)
+    } catch (error) {
+      console.error('Error fetching booking:', error)
+      return reply.status(500).send({ error: 'Failed to fetch booking' })
     }
+  })
 
-    // Create the booking
-    const booking = await prisma.booking.create({
-      data: {
-        courtId,
-        memberId: member.id,
-        startTime: startDateTime,
-        endTime: endDateTime,
-        status: 'confirmed',
-      },
-    })
+  // Update booking
+  app.put<{ Params: ParamsWithId; Body: CreateBookingBody }>('/bookings/:id', {
+    preHandler: [authMiddleware],
+  }, async (request, reply) => {
+    try {
+      const { courtId, memberId, startTime, endTime, type, participants } = request.body
 
-    return NextResponse.json(booking)
-  } catch (error) {
-    console.error('Failed to create booking:', error)
-    return NextResponse.json(
-      { message: 'Failed to create booking' },
-      { status: 500 }
-    )
-  }
+      // First delete existing participants
+      await prisma.bookingParticipant.deleteMany({
+        where: { bookingId: request.params.id },
+      })
+
+      // Then update booking with new data
+      const booking = await prisma.booking.update({
+        where: { id: request.params.id },
+        data: {
+          courtId,
+          memberId,
+          startTime: new Date(startTime),
+          endTime: new Date(endTime),
+          type,
+          participants: {
+            create: participants.map(participant => ({
+              name: participant.name,
+              email: participant.email,
+              isMember: participant.isMember,
+              memberId: participant.isMember ? participant.memberId : null,
+            })),
+          },
+        },
+        include: {
+          court: true,
+          member: true,
+          participants: {
+            include: {
+              member: true
+            }
+          },
+        },
+      })
+
+      return reply.send(booking)
+    } catch (error) {
+      console.error('Error updating booking:', error)
+      return reply.status(500).send({ error: 'Failed to update booking' })
+    }
+  })
+
+  // Delete booking
+  app.delete<{ Params: ParamsWithId }>('/bookings/:id', {
+    preHandler: [authMiddleware],
+  }, async (request, reply) => {
+    try {
+      await prisma.booking.delete({
+        where: { id: request.params.id },
+      })
+      return reply.status(204).send()
+    } catch (error) {
+      console.error('Error deleting booking:', error)
+      return reply.status(500).send({ error: 'Failed to delete booking' })
+    }
+  })
 } 

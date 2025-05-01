@@ -1,86 +1,55 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify'
-import { prisma } from '../lib/prisma'
-import { $Enums } from '@prisma/client'
-import { AuthUser } from '../types/fastify'
+import { prisma } from '@/lib/prisma'
+import { AuthUser } from '@/types/fastify'
 
-// Extend the FastifyRequest type to include our user object
-declare module 'fastify' {
-  interface FastifyRequest {
-    user?: {
-      userId: string
-      role: $Enums.UserRole
-    }
-  }
-}
-
-export const authMiddleware = async (request: FastifyRequest, reply: FastifyReply) => {
+export async function authMiddleware(request: FastifyRequest, reply: FastifyReply) {
   try {
     // Skip auth for public routes
-    if (request.url.startsWith('/api/auth/login') || 
-        request.url.startsWith('/api/auth/register') ||
-        request.url.startsWith('/api/auth/forgot-password') ||
-        request.url.startsWith('/api/auth/verify-reset-token') ||
-        request.url.startsWith('/api/auth/reset-password')) {
+    if (
+      request.url === '/api/auth/login' ||
+      request.url === '/api/auth/register' ||
+      request.url === '/api/auth/logout' ||
+      request.url === '/api/auth/me' ||
+      request.url.startsWith('/api/news/public')
+    ) {
       return
     }
 
-    // For /api/auth/me, we want to verify the token but not require it
-    if (request.url.startsWith('/api/auth/me')) {
-      try {
-        await request.jwtVerify()
-        const decoded = request.user as AuthUser
-        
-        if (!decoded || !decoded.userId) {
-          return reply.status(401).send({ error: 'Invalid token payload' })
-        }
+    const token = request.cookies.accessToken
+    if (!token) {
+      return reply.status(401).send({ error: 'Unauthorized' })
+    }
 
-        const user = await prisma.user.findUnique({
-          where: { id: decoded.userId },
-          select: { id: true, role: true }
-        })
+    try {
+      const decoded = await request.server.jwt.verify<{ userId: string; role: string }>(token)
+      
+      // Get user with member profile
+      const user = await prisma.user.findUnique({
+        where: { id: decoded.userId },
+        include: {
+          memberProfile: true,
+        },
+      })
 
-        if (!user) {
-          return reply.status(401).send({ error: 'User not found' })
-        }
-
-        request.user = {
-          userId: user.id,
-          role: user.role
-        }
-      } catch (error) {
-        // If token verification fails, just continue without setting the user
-        return
+      if (!user) {
+        return reply.status(401).send({ error: 'User not found' })
       }
-      return
-    }
 
-    // For all other protected routes, require valid token
-    await request.jwtVerify()
-    const decoded = request.user as AuthUser
-    
-    if (!decoded || !decoded.userId) {
-      return reply.status(401).send({ error: 'Invalid token payload' })
-    }
-
-    const user = await prisma.user.findUnique({
-      where: { id: decoded.userId },
-      select: { id: true, role: true }
-    })
-
-    if (!user) {
-      return reply.status(401).send({ error: 'User not found' })
-    }
-
-    request.user = {
-      userId: user.id,
-      role: user.role
+      // Attach user data to request
+      request.user = {
+        userId: user.id,
+        role: user.role,
+        memberId: user.memberProfile?.id,
+      } as AuthUser
+    } catch (err) {
+      return reply.status(401).send({ error: 'Invalid token' })
     }
   } catch (error) {
     console.error('Auth middleware error:', error)
-    return reply.status(401).send({ error: 'Invalid token' })
+    return reply.status(500).send({ error: 'Internal server error' })
   }
 }
 
 export function registerAuthMiddleware(app: FastifyInstance) {
-  app.addHook('preHandler', authMiddleware)
+  app.addHook('onRequest', authMiddleware)
 } 
