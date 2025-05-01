@@ -1,6 +1,5 @@
 import { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react'
 import { format } from 'date-fns'
-import apiClient from '@/lib/api'
 import { useToast } from '@/hooks/use-toast'
 
 interface Court {
@@ -17,9 +16,9 @@ interface Court {
 }
 
 interface Amenities {
-  lighting?: boolean
-  covered?: boolean
-  indoor?: boolean
+  lighting: boolean
+  covered: boolean
+  indoor: boolean
 }
 
 interface BookingContextType {
@@ -47,11 +46,11 @@ interface BookingContextType {
 
 const BookingContext = createContext<BookingContextType | undefined>(undefined)
 
-// Helper function to format enum values
-const formatEnumValue = (value: string) => {
+function formatEnumValue(value: string): string {
   return value
+    .toLowerCase()
     .split('_')
-    .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
     .join(' ')
 }
 
@@ -81,13 +80,17 @@ export function BookingProvider({ children }: { children: ReactNode }) {
     setIsLoading(true)
     setError(null)
     try {
-      const response = await apiClient.get('/api/courts/availability', {
-        params: {
-          date: format(selectedDate, 'yyyy-MM-dd'),
-        },
+      const response = await fetch(`/api/courts/availability?date=${format(selectedDate, 'yyyy-MM-dd')}`, {
+        credentials: 'include',
       })
       
-      const courtsData = response.data.map((court: any, index: number) => ({
+      if (!response.ok) {
+        throw new Error('Failed to fetch court availability')
+      }
+
+      const data = await response.json()
+      
+      const courtsData = data.map((court: any, index: number) => ({
         id: court.id || `court-${index}-${Date.now()}`,
         name: court.name || 'Unknown Court',
         surface: formatEnumValue(court.surface || 'Unknown Surface'),

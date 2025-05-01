@@ -1,10 +1,11 @@
 import { Court, CreateCourtData, UpdateCourtData } from '../types'
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api'
+// Use relative path since we're using Vite's proxy
+const API_BASE = '/api'
 
 export async function getAllCourts(): Promise<Court[]> {
   try {
-    const response = await fetch(`${API_URL}/courts`, {
+    const response = await fetch(`${API_BASE}/courts`, {
       credentials: 'include',
     })
     if (!response.ok) {
@@ -19,7 +20,7 @@ export async function getAllCourts(): Promise<Court[]> {
 
 export async function getCourtById(id: number): Promise<Court> {
   try {
-    const response = await fetch(`${API_URL}/courts/${id}`, {
+    const response = await fetch(`${API_BASE}/courts/${id}`, {
       credentials: 'include',
     })
     if (!response.ok) {
@@ -34,7 +35,7 @@ export async function getCourtById(id: number): Promise<Court> {
 
 export async function createCourt(data: CreateCourtData): Promise<Court> {
   try {
-    const response = await fetch(`${API_URL}/courts`, {
+    const response = await fetch(`${API_BASE}/courts`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -55,7 +56,7 @@ export async function createCourt(data: CreateCourtData): Promise<Court> {
 
 export async function updateCourt(id: number, data: UpdateCourtData): Promise<Court> {
   try {
-    const response = await fetch(`${API_URL}/courts/${id}`, {
+    const response = await fetch(`${API_BASE}/courts/${id}`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
@@ -76,7 +77,7 @@ export async function updateCourt(id: number, data: UpdateCourtData): Promise<Co
 
 export async function deleteCourt(id: number): Promise<void> {
   try {
-    const response = await fetch(`${API_URL}/courts/${id}`, {
+    const response = await fetch(`${API_BASE}/courts/${id}`, {
       method: 'DELETE',
       credentials: 'include',
     })
@@ -92,7 +93,7 @@ export async function deleteCourt(id: number): Promise<void> {
 
 export async function getCourtAvailability(date?: string): Promise<Court[]> {
   try {
-    const url = new URL(`${API_URL}/courts/availability`)
+    const url = new URL(`${API_BASE}/courts/availability`, window.location.origin)
     if (date) {
       url.searchParams.append('date', date)
     }
