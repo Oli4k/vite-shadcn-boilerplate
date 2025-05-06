@@ -54,17 +54,6 @@ export function MemberDetail({ member }: MemberDetailProps) {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h2 className="text-2xl font-bold">{member.name}</h2>
-        <p className="text-gray-500">{member.email}</p>
-        <p className="text-sm">
-          Email Status: {member.emailVerified ? 'Verified' : 'Not Verified'}
-        </p>
-        <p className="text-sm">
-          Status: {member.status}
-        </p>
-      </div>
-
       {!member.emailVerified && (
         <div className="space-y-2">
           <Input

@@ -2,6 +2,7 @@ import { FastifyInstance } from 'fastify'
 import { prisma } from '../../lib/prisma'
 import { authMiddleware } from '../../middleware/auth'
 import { UserRole, News, Prisma } from '@prisma/client'
+import crypto from 'crypto'
 
 // Types
 interface ParamsWithId {
@@ -88,7 +89,7 @@ export async function newsRoutes(app: FastifyInstance) {
         prisma.news.findMany({
           where,
           include: {
-            author: {
+            User: {
               select: {
                 name: true
               }
@@ -145,7 +146,7 @@ export async function newsRoutes(app: FastifyInstance) {
         prisma.news.findMany({
           where,
           include: {
-            author: {
+            User: {
               select: {
                 name: true
               }
@@ -189,7 +190,7 @@ export async function newsRoutes(app: FastifyInstance) {
       const news = await prisma.news.findUnique({
         where: { id },
         include: {
-          author: {
+          User: {
             select: {
               name: true
             }
@@ -256,19 +257,20 @@ export async function newsRoutes(app: FastifyInstance) {
 
     try {
       const data = request.body
+      if (!user.userId) {
+        throw new Error('Missing userId for news author')
+      }
       const news = await prisma.news.create({
         data: {
+          id: crypto.randomUUID(),
           title: data.title,
           content: data.content,
           published: data.published ?? false,
-          author: {
-            connect: {
-              id: user.userId
-            }
-          }
+          authorId: user.userId,
+          updatedAt: new Date(),
         },
         include: {
-          author: {
+          User: {
             select: {
               name: true
             }
@@ -347,7 +349,7 @@ export async function newsRoutes(app: FastifyInstance) {
           published: data.published
         },
         include: {
-          author: {
+          User: {
             select: {
               name: true
             }

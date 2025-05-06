@@ -1,8 +1,9 @@
 import { FastifyInstance } from 'fastify'
 import { z } from 'zod'
-import { Prisma } from '@prisma/client'
+import { Prisma, Booking, Court, Member, BookingParticipant } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { authMiddleware } from '@/middleware/auth'
+import crypto from 'crypto'
 
 interface ParamsWithId {
   id: string
@@ -24,17 +25,13 @@ interface CreateBookingBody {
   participants: CreateBookingParticipant[]
 }
 
-type BookingWithRelations = Prisma.BookingGetPayload<{
-  include: {
-    court: true
-    member: true
-    participants: {
-      include: {
-        member: true
-      }
-    }
-  }
-}>
+interface BookingWithRelations extends Booking {
+  Court: Court;
+  Member: Member;
+  BookingParticipant: (BookingParticipant & {
+    Member: Member | null;
+  })[];
+}
 
 export async function bookingsRoutes(app: FastifyInstance) {
   // Get all bookings
@@ -44,15 +41,16 @@ export async function bookingsRoutes(app: FastifyInstance) {
     try {
       const bookings = await prisma.booking.findMany({
         include: {
-          court: true,
-          member: true,
-          participants: {
+          Court: true,
+          Member: true,
+          BookingParticipant: {
             include: {
-              member: true
+              Member: true
             }
           },
         },
-      })
+      }) as unknown as BookingWithRelations[];
+
       return reply.send(bookings)
     } catch (error) {
       console.error('Error fetching bookings:', error)
@@ -69,30 +67,36 @@ export async function bookingsRoutes(app: FastifyInstance) {
 
       const booking = await prisma.booking.create({
         data: {
+          id: crypto.randomUUID(),
           courtId,
           memberId,
           startTime: new Date(startTime),
           endTime: new Date(endTime),
           type,
-          participants: {
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          BookingParticipant: {
             create: participants.map(participant => ({
+              id: crypto.randomUUID(),
               name: participant.name,
               email: participant.email,
               isMember: participant.isMember,
               memberId: participant.isMember ? participant.memberId : null,
+              createdAt: new Date(),
+              updatedAt: new Date()
             })),
           },
         },
         include: {
-          court: true,
-          member: true,
-          participants: {
+          Court: true,
+          Member: true,
+          BookingParticipant: {
             include: {
-              member: true
+              Member: true
             }
           },
         },
-      })
+      }) as unknown as BookingWithRelations;
 
       return reply.status(201).send(booking)
     } catch (error) {
@@ -109,15 +113,15 @@ export async function bookingsRoutes(app: FastifyInstance) {
       const booking = await prisma.booking.findUnique({
         where: { id: request.params.id },
         include: {
-          court: true,
-          member: true,
-          participants: {
+          Court: true,
+          Member: true,
+          BookingParticipant: {
             include: {
-              member: true
+              Member: true
             }
           },
         },
-      })
+      }) as unknown as BookingWithRelations;
 
       if (!booking) {
         return reply.status(404).send({ error: 'Booking not found' })
@@ -151,25 +155,29 @@ export async function bookingsRoutes(app: FastifyInstance) {
           startTime: new Date(startTime),
           endTime: new Date(endTime),
           type,
-          participants: {
+          updatedAt: new Date(),
+          BookingParticipant: {
             create: participants.map(participant => ({
+              id: crypto.randomUUID(),
               name: participant.name,
               email: participant.email,
               isMember: participant.isMember,
               memberId: participant.isMember ? participant.memberId : null,
+              createdAt: new Date(),
+              updatedAt: new Date()
             })),
           },
         },
         include: {
-          court: true,
-          member: true,
-          participants: {
+          Court: true,
+          Member: true,
+          BookingParticipant: {
             include: {
-              member: true
+              Member: true
             }
           },
         },
-      })
+      }) as unknown as BookingWithRelations;
 
       return reply.send(booking)
     } catch (error) {

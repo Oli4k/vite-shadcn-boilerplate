@@ -2,20 +2,13 @@ import { useAuth } from '@/contexts/auth-context'
 import { MemberForm } from '@/components/member-form'
 
 export function CreateMember() {
-  const { getAccessToken } = useAuth()
-
   const handleSubmit = async (data: any) => {
-    const token = getAccessToken()
-    if (!token) {
-      throw new Error('Not authenticated')
-    }
-
     const response = await fetch('/api/members', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
       },
+      credentials: 'include',
       body: JSON.stringify(data),
     })
 

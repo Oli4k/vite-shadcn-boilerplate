@@ -3,11 +3,11 @@ import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 
 interface User {
-  id: string
+  id: number
   email: string
   name: string | null
   role: 'ADMIN' | 'STAFF' | 'MEMBER'
-  memberId?: string
+  memberId?: number
 }
 
 interface AuthContextType {

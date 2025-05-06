@@ -10,6 +10,9 @@ export async function authMiddleware(request: FastifyRequest, reply: FastifyRepl
       request.url === '/api/auth/register' ||
       request.url === '/api/auth/logout' ||
       request.url === '/api/auth/me' ||
+      request.url === '/api/auth/forgot-password' ||
+      request.url === '/api/auth/verify-reset-token' ||
+      request.url === '/api/auth/reset-password' ||
       request.url.startsWith('/api/news/public')
     ) {
       return
@@ -23,12 +26,11 @@ export async function authMiddleware(request: FastifyRequest, reply: FastifyRepl
     try {
       const decoded = await request.server.jwt.verify<{ userId: string; role: string }>(token)
       
-      // Get user with member profile
+      // Get user
       const user = await prisma.user.findUnique({
-        where: { id: decoded.userId },
-        include: {
-          memberProfile: true,
-        },
+        where: {
+          id: decoded.userId
+        }
       })
 
       if (!user) {
@@ -38,9 +40,8 @@ export async function authMiddleware(request: FastifyRequest, reply: FastifyRepl
       // Attach user data to request
       request.user = {
         userId: user.id,
-        role: user.role,
-        memberId: user.memberProfile?.id,
-      } as AuthUser
+        role: user.role
+      }
     } catch (err) {
       return reply.status(401).send({ error: 'Invalid token' })
     }

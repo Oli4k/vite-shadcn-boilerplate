@@ -238,7 +238,7 @@ export default function AdminNews() {
               <div>
                 <CardTitle className="text-xl">{item.title}</CardTitle>
                 <p className="text-sm text-muted-foreground">
-                  By {item.author.name} • {format(new Date(item.createdAt), 'PPP')}
+                  By {item.User?.name ?? "Unknown"} • {format(new Date(item.createdAt), 'PPP')}
                 </p>
               </div>
               <div className="flex space-x-2">

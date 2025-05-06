@@ -1,7 +1,7 @@
 import { FastifyInstance } from 'fastify'
 import { prisma } from '../../lib/prisma'
-import { Court, CreateCourtData, UpdateCourtData, CourtStatus, CourtSurface, CourtType } from '../../types'
 import { authMiddleware } from '../../middleware/auth'
+import { CourtStatus, CourtSurface, CourtType, Court } from '@prisma/client'
 
 interface ParamsWithId {
   id: string
@@ -11,11 +11,29 @@ interface ErrorResponse {
   error: string
 }
 
+interface CreateCourtData {
+  name: string
+  surface: CourtSurface
+  type: CourtType
+  hasLights?: boolean
+}
+
+interface UpdateCourtData {
+  name?: string
+  surface?: CourtSurface
+  type?: CourtType
+  status?: CourtStatus
+  hasLights?: boolean
+}
+
+interface TimeSlot {
+  startTime: string
+  endTime: string
+}
+
 export async function courtsRoutes(app: FastifyInstance) {
   // Get all courts
-  app.get<{
-    Reply: Court[] | ErrorResponse
-  }>('/courts', {
+  app.get('/courts', {
     preHandler: [authMiddleware],
   }, async (_request, reply) => {
     try {
@@ -24,12 +42,7 @@ export async function courtsRoutes(app: FastifyInstance) {
           name: 'asc',
         },
       })
-      return reply.send(courts.map(court => ({
-        ...court,
-        surface: court.surface,
-        type: court.type,
-        status: court.status,
-      })))
+      return reply.send(courts)
     } catch (error) {
       console.error('Error fetching courts:', error)
       return reply.status(500).send({ error: 'Failed to fetch courts' })
@@ -51,19 +64,14 @@ export async function courtsRoutes(app: FastifyInstance) {
       if (!court) {
         return reply.status(404).send({ error: 'Court not found' })
       }
-      return reply.send({
-        ...court,
-        surface: court.surface,
-        type: court.type,
-        status: court.status,
-      })
+      return reply.send(court)
     } catch (error) {
       console.error('Error fetching court:', error)
       return reply.status(500).send({ error: 'Failed to fetch court' })
     }
   })
 
-  // Create new court
+  // Create court
   app.post<{
     Body: CreateCourtData,
     Reply: Court | ErrorResponse
@@ -71,22 +79,20 @@ export async function courtsRoutes(app: FastifyInstance) {
     preHandler: [authMiddleware],
   }, async (request, reply) => {
     try {
-      const data = request.body
+      const { name, surface, type, hasLights = false } = request.body
       const court = await prisma.court.create({
         data: {
-          name: data.name,
-          surface: data.surface as CourtSurface,
-          type: data.type as CourtType,
-          status: (data.status || 'ACTIVE') as CourtStatus,
-          hasLights: data.hasLights || false,
+          id: crypto.randomUUID(),
+          name,
+          surface,
+          type,
+          hasLights,
+          status: CourtStatus.ACTIVE,
+          createdAt: new Date(),
+          updatedAt: new Date(),
         },
       })
-      return reply.status(201).send({
-        ...court,
-        surface: court.surface,
-        type: court.type,
-        status: court.status,
-      })
+      return reply.status(201).send(court)
     } catch (error) {
       console.error('Error creating court:', error)
       return reply.status(500).send({ error: 'Failed to create court' })
@@ -103,23 +109,19 @@ export async function courtsRoutes(app: FastifyInstance) {
   }, async (request, reply) => {
     try {
       const { id } = request.params
-      const data = request.body
+      const { name, surface, type, status, hasLights } = request.body
       const court = await prisma.court.update({
         where: { id },
         data: {
-          name: data.name,
-          surface: data.surface as CourtSurface,
-          type: data.type as CourtType,
-          status: data.status as CourtStatus,
-          hasLights: data.hasLights,
+          name,
+          surface,
+          type,
+          status,
+          hasLights,
+          updatedAt: new Date(),
         },
       })
-      return reply.send({
-        ...court,
-        surface: court.surface,
-        type: court.type,
-        status: court.status,
-      })
+      return reply.send(court)
     } catch (error) {
       console.error('Error updating court:', error)
       return reply.status(500).send({ error: 'Failed to update court' })
@@ -157,10 +159,10 @@ export async function courtsRoutes(app: FastifyInstance) {
       // Get all active courts
       const courts = await prisma.court.findMany({
         where: {
-          status: 'ACTIVE'
+          status: CourtStatus.ACTIVE
         },
         include: {
-          bookings: {
+          Booking: {
             where: {
               startTime: {
                 gte: selectedDate,
@@ -173,52 +175,58 @@ export async function courtsRoutes(app: FastifyInstance) {
       })
 
       // Generate time slots for the day (7:00 to 22:00, 30-minute intervals)
-      interface TimeSlot {
-        startTime: string;
-        endTime: string;
-      }
-      
       const timeSlots: TimeSlot[] = []
-      for (let hour = 7; hour < 22; hour++) {
+      const startHour = 7
+      const endHour = 22
+      
+      for (let hour = startHour; hour < endHour; hour++) {
         for (let minute = 0; minute < 60; minute += 30) {
+          const startTime = new Date(selectedDate)
+          startTime.setHours(hour, minute)
+          
+          const endTime = new Date(startTime)
+          endTime.setMinutes(endTime.getMinutes() + 30)
+          
           timeSlots.push({
-            startTime: `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`,
-            endTime: `${(hour + (minute + 30 >= 60 ? 1 : 0)).toString().padStart(2, '0')}:${((minute + 30) % 60).toString().padStart(2, '0')}`,
+            startTime: startTime.toISOString(),
+            endTime: endTime.toISOString(),
           })
         }
       }
 
-      // Map courts with their available slots
-      const courtsWithSlots = courts.map(court => {
-        const bookedSlots = new Set(
-          court.bookings.map(booking => 
-            `${booking.startTime.getHours().toString().padStart(2, '0')}:${booking.startTime.getMinutes().toString().padStart(2, '0')}`
-          )
-        )
-
-        const availableSlots = timeSlots.map(slot => {
-          const isBooked = bookedSlots.has(slot.startTime)
-          const hour = parseInt(slot.startTime.split(':')[0])
-          const isPeak = hour >= 17 && hour < 20
+      // Check availability for each court and time slot
+      const availability = courts.map(court => {
+        const slots = timeSlots.map(slot => {
+          const isBooked = court.Booking.some(booking => {
+            const bookingStart = new Date(booking.startTime)
+            const bookingEnd = new Date(booking.endTime)
+            const slotStart = new Date(slot.startTime)
+            const slotEnd = new Date(slot.endTime)
+            
+            return (
+              (slotStart >= bookingStart && slotStart < bookingEnd) ||
+              (slotEnd > bookingStart && slotEnd <= bookingEnd) ||
+              (slotStart <= bookingStart && slotEnd >= bookingEnd)
+            )
+          })
           
           return {
-            startTime: slot.startTime,
-            endTime: slot.endTime,
-            isBooked,
-            price: isPeak ? 30 : 20, // Example pricing: $30 for peak hours, $20 for off-peak
+            ...slot,
+            available: !isBooked
           }
         })
-
+        
         return {
-          ...court,
+          id: court.id,
+          name: court.name,
           surface: court.surface,
           type: court.type,
-          status: court.status,
-          availableSlots,
+          hasLights: court.hasLights,
+          slots
         }
       })
 
-      return reply.send(courtsWithSlots)
+      return reply.send(availability)
     } catch (error) {
       console.error('Error fetching court availability:', error)
       return reply.status(500).send({ error: 'Failed to fetch court availability' })

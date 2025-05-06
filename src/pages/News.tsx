@@ -68,7 +68,7 @@ export default function News() {
               <div>
                 <CardTitle className="text-xl">{item.title}</CardTitle>
                 <p className="text-sm text-muted-foreground">
-                  By {item.author.name} • {format(new Date(item.createdAt), 'PPP')}
+                  By {item.User?.name ?? "Unknown"} • {format(new Date(item.createdAt), 'PPP')}
                 </p>
               </div>
             </div>

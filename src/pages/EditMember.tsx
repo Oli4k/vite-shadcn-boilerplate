@@ -26,7 +26,7 @@ interface Member {
 export default function EditMember() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const { user, getAccessToken } = useAuth()
+  const { user } = useAuth()
   const { toast } = useToast()
   const [member, setMember] = useState<Member | null>(null)
   const [loading, setLoading] = useState(true)
@@ -39,17 +39,8 @@ export default function EditMember() {
 
   const fetchMember = async () => {
     try {
-      const token = getAccessToken()
-      if (!token) {
-        setError('Not authenticated')
-        setLoading(false)
-        return
-      }
-
       const response = await fetch(`/api/members/${id}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        credentials: 'include',
       })
       if (!response.ok) {
         throw new Error('Failed to fetch member')
@@ -71,19 +62,12 @@ export default function EditMember() {
     setError('')
 
     try {
-      const token = getAccessToken()
-      if (!token) {
-        setError('Not authenticated')
-        setSaving(false)
-        return
-      }
-
       const response = await fetch(`/api/members/${id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
         },
+        credentials: 'include',
         body: JSON.stringify(member),
       })
 

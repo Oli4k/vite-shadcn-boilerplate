@@ -43,6 +43,9 @@ export interface News {
   };
   createdAt: string;
   updatedAt: string;
+  User?: {
+    name: string;
+  };
 }
 
 export interface CreateNewsData {

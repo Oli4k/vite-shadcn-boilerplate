@@ -43,6 +43,7 @@ export default function ResetPassword() {
         headers: {
           'Content-Type': 'application/json',
         },
+        credentials: 'include',
         body: JSON.stringify({ email }),
       })
 
@@ -71,6 +72,7 @@ export default function ResetPassword() {
         headers: {
           'Content-Type': 'application/json',
         },
+        credentials: 'include',
         body: JSON.stringify({ email }),
       })
 
@@ -99,6 +101,7 @@ export default function ResetPassword() {
         headers: {
           'Content-Type': 'application/json',
         },
+        credentials: 'include',
         body: JSON.stringify({ token: code }),
       })
 
@@ -132,6 +135,7 @@ export default function ResetPassword() {
         headers: {
           'Content-Type': 'application/json',
         },
+        credentials: 'include',
         body: JSON.stringify({
           token: code,
           password: newPassword,
